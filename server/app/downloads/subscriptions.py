@@ -128,6 +128,7 @@ def check(db: Database, downloader, sub_id: int, *, listing=None) -> dict:
                 "UPDATE subscriptions SET last_checked = ?, last_error = ? WHERE id = ?",
                 (time.time(), str(exc)[:500], sub_id),
             )
+        log.warning("check of subscription %s (%s) failed: %s", sub_id, sub["url"], str(exc)[:300])
         return {"queued": 0, "error": str(exc)}
     videos = listing.videos[:want]
     if sub["mode"] == "all":
@@ -157,6 +158,8 @@ def check(db: Database, downloader, sub_id: int, *, listing=None) -> dict:
         queued += 1
     with db.conn() as c:
         c.execute("UPDATE subscriptions SET last_checked = ?, last_error = '' WHERE id = ?", (time.time(), sub_id))
+    if queued or skipped:
+        log.info("check of subscription %s (%s): %d queued, %d left out by its rules", sub_id, sub["url"], queued, skipped)
     return {"queued": queued, "skipped": skipped}
 
 
@@ -173,7 +176,28 @@ def unsubscribe(db: Database, sub_id: int) -> int:
             "SELECT i.id FROM items i JOIN sub_seen s ON s.external_id = i.external_id AND s.sub_id = ? "
             "WHERE i.container_id = ? AND i.source = 'local'", (sub_id, sub["container_id"]))]
         c.execute("DELETE FROM subscriptions WHERE id = ?", (sub_id,))
-    return jobs.stop_for_items(db, ids)
+    stopped = jobs.stop_for_items(db, ids)
+    log.info("unsubscribed %s (channel %s): %d downloads stopped", sub_id, sub["container_id"], stopped)
+    return stopped
+
+
+def delete_channel(db: Database, library_dir: Path, container_id: int) -> dict:
+    """Unsubscribe and delete everything from one channel: its downloads stop, its video files go, and the channel
+    leaves the library (its subscription, videos and who-sees-it go with it). Returns what it did."""
+    with db.conn() as c:
+        row = c.execute("SELECT id FROM containers WHERE id = ? AND source = 'local'", (container_id,)).fetchone()
+        if not row:
+            return {"found": False, "videos": 0, "stopped": 0}
+        sub = c.execute("SELECT id FROM subscriptions WHERE container_id = ?", (container_id,)).fetchone()
+        items = c.execute("SELECT id, file_path FROM items WHERE container_id = ?", (container_id,)).fetchall()
+    stopped = unsubscribe(db, sub["id"]) if sub else 0
+    stopped += jobs.stop_for_items(db, [r["id"] for r in items])  # videos added by hand from it too
+    for r in items:
+        _delete_files(library_dir, r["file_path"] or "")
+    with db.conn() as c:
+        c.execute("DELETE FROM containers WHERE id = ?", (container_id,))
+    log.info("deleted channel %s: %d videos, %d downloads stopped", container_id, len(items), stopped)
+    return {"found": True, "videos": len(items), "stopped": stopped}
 
 
 def due(db: Database, now: float | None = None) -> list[int]:

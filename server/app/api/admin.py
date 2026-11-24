@@ -1,6 +1,7 @@
 """The parents' API, behind the admin password (ADR 0018, ADR 0025)."""
 from __future__ import annotations
 
+import logging
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -12,6 +13,8 @@ from ..downloads import jobs
 from ..rules import pipeline
 from ..security import check_password, hash_password
 from ..sources import plex
+
+log = logging.getLogger("kidtube.admin")
 
 COOKIE = "kt_admin"
 SESSION_S = 30 * 24 * 3600
@@ -353,6 +356,7 @@ def items_decide(body: DecideIn, request: Request) -> dict:
             c.execute("INSERT INTO events (ts, item_id, type, data) VALUES (?, ?, 'approval', ?)",
                       (now, item_id, body.approval))
     stopped = jobs.stop_for_items(_db(request), body.ids) if body.approval == "hidden" else 0  # "Not for them"
+    log.info("decided %d videos: %s (%d downloads stopped)", len(body.ids), body.approval, stopped)
     return {"decided": len(body.ids), "stopped": stopped}
 
 

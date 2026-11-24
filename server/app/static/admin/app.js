@@ -572,7 +572,7 @@ async function viewSubscribe(url, subId) {
     if (subId) {
       if (sub) await api(`/subscriptions/${sub.id}`, { method: "PUT", body: rules() });
       await api(`/channels/${subId}`, { method: "PATCH", body: { trusted, profile_ids: pids } });
-      if (!sub) await api("/subscribe", { method: "POST", body: { url: info.url, rules: rules(), profile_ids: pids, trusted } });
+      if (!sub) await api("/subscribe", { method: "POST", body: { url: info.url || "", container_id: +subId, rules: rules(), profile_ids: pids, trusted } });
       toast("Saved");
       go(`channel/${subId}`);
     } else {
@@ -585,6 +585,12 @@ async function viewSubscribe(url, subId) {
   screen(subId && sub ? "Subscription" : "Subscribe", { back: subId ? `channel/${subId}` : "library" },
     h("div", { class: "kt-channel" }, chanAvatar(info.channel_id, info.avatar_url, info.title, "kt-avatar--lg"),
       h("div", { class: "kt-video__body" }, h("div", { class: "kt-video__title" }, info.title), h("div", { class: "kt-muted" }, info.url))),
+    // At the top, where it is found (it used to sit under all the rules).
+    subId && sub ? h("button", { class: "kt-btn kt-btn--danger", type: "button", style: "align-self:flex-start", onclick: () => run(async () => {
+      const r = await api(`/subscriptions/${sub.id}`, { method: "DELETE" });
+      toast(r.stopped ? `Unsubscribed. ${r.stopped} waiting download${r.stopped === 1 ? "" : "s"} stopped; downloaded videos stay.` : "Unsubscribed. Downloaded videos stay.");
+      go(`channel/${subId}`);
+    }) }, "Unsubscribe") : null,
     strip.length ? h("div", { class: "kt-row", style: "flex-wrap:nowrap; gap:6px" }, strip.map((v) => thumb(v.thumb_url, { style: "width:33%; border-radius:var(--radius-sm)" }))) : null,
     h("h2", { class: "kt-label" }, "Who can see this channel"),
     profileChips(pids, (next) => (pids = next)),
@@ -612,12 +618,7 @@ async function viewSubscribe(url, subId) {
         h("div", { class: "kt-list" },
           row(h("label", { for: "check_hours" }, "Check every (hours)"), f.check_hours),
           row(h("label", { for: "daily_cap" }, "Most downloads a day"), f.daily_cap, "Keeps big first imports gentle")))),
-    subId && sub ? save : null,
-    subId && sub ? h("button", { class: "kt-btn kt-btn--danger", type: "button", style: "align-self:flex-start", onclick: () => run(async () => {
-      const r = await api(`/subscriptions/${sub.id}`, { method: "DELETE" });
-      toast(r.stopped ? `Unsubscribed. ${r.stopped} waiting download${r.stopped === 1 ? "" : "s"} stopped; downloaded videos stay.` : "Unsubscribed. Downloaded videos stay.");
-      go(`channel/${subId}`);
-    }) }, "Unsubscribe") : null);
+    subId && sub ? save : null);
 }
 
 // ---- Approve: videos waiting for a parent's yes (ADR 0037; was "Inbox") --------------------------------------------
@@ -799,7 +800,26 @@ async function viewChannel(id, tab = "library") {
             toast(r.error ? r.error : r.queued ? `Found ${r.queued} new. Downloading.` : "Nothing new.");
             kickActivity();
             viewChannel(id, tab);
-          }) }, "Check for new videos") : null))),
+          }) }, "Check for new videos") : null,
+          sub ? h("button", { class: "kt-btn", type: "button", onclick: (e) => run(async () => {
+            busy(e.currentTarget);
+            const r = await api(`/subscriptions/${sub.id}`, { method: "DELETE" });
+            toast(r.stopped ? `Unsubscribed. ${r.stopped} waiting download${r.stopped === 1 ? "" : "s"} stopped; downloaded videos stay.` : "Unsubscribed. Downloaded videos stay.");
+            kickActivity();
+            viewChannel(id, tab);
+          }) }, "Unsubscribe") : null,
+          // Everything from this channel goes: two taps, and the second says how much.
+          local ? h("button", { class: "kt-btn kt-btn--danger", type: "button", onclick: (e) => {
+            const b = e.currentTarget, n = d.items.length;
+            if (!b.dataset.sure) { b.dataset.sure = "1"; b.textContent = `Tap again: delete ${c.title} and its ${n} video${n === 1 ? "" : "s"}`; return; }
+            run(async () => {
+              busy(b);
+              const r = await api(`/channels/${id}`, { method: "DELETE" });
+              toast(`${c.title} is gone: ${r.videos} video${r.videos === 1 ? "" : "s"} deleted${r.stopped ? `, ${r.stopped} download${r.stopped === 1 ? "" : "s"} stopped` : ""}.`);
+              kickActivity();
+              go("library");
+            });
+          } }, sub ? "Unsubscribe and delete all" : "Delete channel and its videos") : null))),
     h("h2", { class: "kt-label" }, "Who can see this channel"),
     profileChips(pids, (next) => run(async () => { pids = next; await api(`/channels/${id}`, { method: "PATCH", body: { profile_ids: next } }); toast(`${c.title}: ${next.length ? "for " + namesOf(next) : "nobody for now"}`); })),
     h("nav", { class: "kt-tabs", "aria-label": "Videos" },

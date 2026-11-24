@@ -3,6 +3,7 @@ reports. Everything here sits behind the admin password (ADR 0018)."""
 from __future__ import annotations
 
 import json
+import logging
 import re
 import shutil
 import time
@@ -20,6 +21,7 @@ from .admin import require_admin
 from .extras import avatar_url
 
 router = APIRouter(prefix="/api/admin", dependencies=[Depends(require_admin)])
+log = logging.getLogger("kidtube.manage")
 
 NOW_PLAYING_FRESH_S = 60
 
@@ -80,8 +82,11 @@ def channel(cid: int, request: Request) -> dict:
         ]
     for it in items:
         it["has_thumb"] = bool(it.pop("thumb_path")) or it["source"] == "plex"
+    ch = dict(row)
+    if ch["source"] == "local":  # older channels were saved without an address; build it from the channel id
+        ch["url"] = jobs.channel_url(ch["external_id"], ch["url"] or "")
     return {
-        "channel": dict(row), "subscription": dict(sub) if sub else None, "profile_ids": profile_ids, "items": items,
+        "channel": ch, "subscription": dict(sub) if sub else None, "profile_ids": profile_ids, "items": items,
     }
 
 
@@ -123,7 +128,8 @@ class Rules(BaseModel):
 
 
 class SubscribeIn(BaseModel):
-    url: str = Field(min_length=8, max_length=500)
+    url: str = Field(default="", max_length=500)
+    container_id: int | None = None  # from a channel's page: the server finds (or builds) its address
     rules: Rules = Rules()
     profile_ids: list[int] | None = None
     trusted: bool = False
@@ -132,6 +138,16 @@ class SubscribeIn(BaseModel):
 @router.post("/subscribe")
 def subscribe(body: SubscribeIn, request: Request) -> dict:
     db = _db(request)
+    url = body.url.strip()
+    if len(url) < 8 and body.container_id:
+        with db.conn() as c:
+            row = c.execute("SELECT external_id, url FROM containers WHERE id = ? AND source = 'local'",
+                            (body.container_id,)).fetchone()
+        url = jobs.channel_url(row["external_id"], row["url"] or "") if row else ""
+    if len(url) < 8:
+        log.warning("subscribe refused: no address (url=%r, container_id=%r)", body.url, body.container_id)
+        raise HTTPException(400, "This channel has no YouTube address to subscribe to. Paste its link in Add instead.")
+    log.info("subscribe %s (container %s, mode %s, for %s)", url, body.container_id, body.rules.mode, body.profile_ids)
     pids = body.profile_ids
     if pids is None:
         with db.conn() as c:
@@ -139,11 +155,15 @@ def subscribe(body: SubscribeIn, request: Request) -> dict:
     rules = body.rules.model_dump()
     rules = {k: (int(v) if isinstance(v, bool) else v) for k, v in rules.items()}
     try:
-        return subscriptions.subscribe(db, request.app.state.downloader, body.url, rules, pids, body.trusted)
+        out = subscriptions.subscribe(db, request.app.state.downloader, url, rules, pids, body.trusted)
     except ValueError as exc:
+        log.warning("subscribe %s refused: %s", url, exc)
         raise HTTPException(400, str(exc))
     except Exception as exc:
+        log.exception("subscribe %s failed reading the channel", url)
         raise HTTPException(502, f"Could not read that channel: {exc}")
+    log.info("subscribed %s -> subscription %s, channel %s", url, out.get("subscription_id"), out.get("container_id"))
+    return out
 
 
 @router.put("/subscriptions/{sid}")
@@ -163,6 +183,16 @@ def subscription_check(sid: int, request: Request) -> dict:
 def subscription_delete(sid: int, request: Request) -> dict:
     """Stop following the channel, and stop its waiting downloads. Videos already downloaded stay."""
     return {"ok": True, "stopped": subscriptions.unsubscribe(_db(request), sid)}
+
+
+@router.delete("/channels/{cid}")
+def channel_delete(cid: int, request: Request) -> dict:
+    """Unsubscribe and delete all: the channel, every video from it and their files (a YouTube channel only;
+    Plex shows are removed with /plex/containers)."""
+    out = subscriptions.delete_channel(_db(request), request.app.state.cfg.library_dir, cid)
+    if not out["found"]:
+        raise HTTPException(404, "No such YouTube channel.")
+    return out
 
 
 # ---- one video ------------------------------------------------------------------------------------------------------

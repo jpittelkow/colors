@@ -32,9 +32,18 @@ def skip_categories(db: Database) -> list[str]:
         return []
 
 
+def channel_url(external_id: str, url: str = "") -> str:
+    """A channel's address. Channels that came in with a single video or an import were saved without one, and
+    subscribing to them then sent an empty address (a 422 the parent saw as "Check the values you entered")."""
+    if url:
+        return url
+    return f"https://www.youtube.com/channel/{external_id}" if external_id.startswith("UC") else ""
+
+
 def ensure_channel(c, v: VideoInfo, *, url: str = "", avatar: str = "", now: float | None = None) -> int:
     now = time.time() if now is None else now
     key = v.channel_id or f"unknown:{v.channel_title or 'Unknown'}"
+    url = channel_url(key, url)
     c.execute(
         "INSERT INTO containers (source, kind, external_id, title, url, thumb_url, added_at) "
         "VALUES ('local', 'channel', ?, ?, ?, ?, ?) ON CONFLICT (source, external_id) DO UPDATE SET "

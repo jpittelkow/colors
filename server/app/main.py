@@ -1,7 +1,6 @@
 """One process: the admin API and page, the TV API, streaming and the download worker (ADR 0003)."""
 from __future__ import annotations
 
-import logging
 import os
 import re
 from contextlib import asynccontextmanager
@@ -11,7 +10,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import background
+from . import background, logs
 from .api import admin, ai, automation, downloads, extras, manage, tv
 from .channel_pics import ChannelPics
 from .config import Config
@@ -56,6 +55,7 @@ def create_app(cfg: Config | None = None, downloader=None) -> FastAPI:
             t.stop()
 
     app = FastAPI(title="colors", lifespan=lifespan, docs_url=None, redoc_url=None)
+    logs.install(app)
     app.state.cfg = cfg
     app.state.db = db
     app.state.signer = Signer(db)
@@ -113,5 +113,6 @@ def create_app(cfg: Config | None = None, downloader=None) -> FastAPI:
 
 
 def app_from_env() -> FastAPI:
-    logging.basicConfig(level=logging.INFO)
-    return create_app()
+    cfg = Config.from_env()
+    logs.setup(cfg.data_dir)  # console + <data>/logs, rotated every few days
+    return create_app(cfg)

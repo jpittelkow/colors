@@ -41,6 +41,7 @@ import androidx.compose.ui.input.key.nativeKeyCode
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.viewinterop.AndroidView
@@ -93,6 +94,14 @@ fun PlayerScreen(nav: Nav, profile: Profile, itemId: Int, chain: Int) {
             .build()
     }
     DisposableEffect(Unit) { onDispose { player.release() } }
+
+    // Keep the screen awake while a video plays, or the TV's screensaver comes up over it after its idle timeout
+    // (10 min on the office Chromecast, 2026-11-24). Paused, the screensaver may come as usual.
+    val view = LocalView.current
+    DisposableEffect(playing) {
+        view.keepScreenOn = playing
+        onDispose { view.keepScreenOn = false }
+    }
 
     fun stopAndShow(t: TimeState?, note: String = "") {
         player.pause()

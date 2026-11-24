@@ -248,7 +248,8 @@ class FakeOpenRouter:
         if url.endswith("/key"):
             return {"data": {"label": "test"}}
         self.sent.append(body)
-        return {"choices": [{"message": {"content": json.dumps(self.answer)}}],
+        content = self.answer if isinstance(self.answer, str) else json.dumps(self.answer)  # a str: the raw reply
+        return {"choices": [{"message": {"content": content}}],
                 "usage": {"prompt_tokens": 100, "completion_tokens": 20, "cost": 0.001}}
 
 
@@ -364,3 +365,19 @@ def test_jobs_page_lists_every_running_job_hidden_ones_too(env):
     assert "test-hidden" not in [j["name"] for j in body["jobs"]]  # still not a card with Run now
     go_on.set()
     wait_for(lambda: not env.client.get("/api/admin/background-jobs").json()["running"])
+
+
+def test_a_reply_cut_off_mid_list_still_gives_a_row(env, monkeypatch):
+    """2026-11-24: after a big import the reply hit max_tokens and the job failed with "did not answer in JSON"."""
+    sam, _ = kids(env)
+    ids = env.client.post("/api/admin/add", json={"urls": [f"https://example.test/watch?v={v}" for v in ("a", "b", "c")],
+                                                  "approve": True}).json()["added"]
+    env.run_jobs()
+    ai_on(env, monkeypatch, f'{{"order": [{ids[2]}, 99999, {ids[0]}, {ids[1]}')  # stops mid-list, no closing brackets
+    assert env.app.state.registry.start_job("ai-picks", wait=True)
+    with env.db.conn() as c:  # the ids it named before it stopped, in its order; 99999 was never offered
+        assert json.loads(c.execute("SELECT item_ids FROM picks WHERE profile_id = ?", (sam,)).fetchone()[0]) == [ids[2], ids[0], ids[1]]
+    ai_on(env, monkeypatch, "Sorry, I can't help with that.")  # nothing usable: still an error, as before
+    assert env.app.state.registry.start_job("ai-picks", wait=True)
+    with env.db.conn() as c:
+        assert c.execute("SELECT state FROM job_runs WHERE job = 'ai-picks' ORDER BY id DESC").fetchone()[0] == "failed"

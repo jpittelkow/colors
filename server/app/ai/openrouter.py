@@ -17,7 +17,9 @@ DEFAULT_CAP_USD = 2.0
 
 
 class AIError(Exception):
-    pass
+    """`text` is the model's raw reply when the trouble was the reply itself (not JSON, or cut off)."""
+
+    text = ""
 
 
 def settings(db: Database) -> dict:
@@ -101,7 +103,11 @@ def chat(db: Database, purpose: str, system: str, user: str, *, max_tokens: int 
                 (time.time(), purpose, s["model"], int(usage.get("prompt_tokens") or 0),
                  int(usage.get("completion_tokens") or 0), float(usage.get("cost") or 0), ok, error[:300]),
             )
-    return parse_json(content)
+    try:
+        return parse_json(content)
+    except AIError as exc:
+        exc.text = content  # a reply cut off by max_tokens may still hold what the caller needs
+        raise
 
 
 def parse_json(text: str) -> dict:

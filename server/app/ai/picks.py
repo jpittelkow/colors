@@ -6,6 +6,7 @@ when the row is drawn. What comes back is a list of ids; any id that was not in 
 from __future__ import annotations
 
 import json
+import re
 import time
 
 from ..db import Database
@@ -42,10 +43,18 @@ def build(db: Database, profile_id: int, label: str) -> int:
              f"{' | watched' if r['watched'] else ''}" for r in items]
     user = (f"{label}.\nRecently started: " + ("; ".join(r["title"] for r in recent) or "nothing yet")
             + "\n\nVideos (id | title | channel | length):\n" + "\n".join(lines))
-    answer = openrouter.chat(db, "picks", SYSTEM, user, max_tokens=400)
     allowed = {r["id"] for r in items}
+    try:
+        # 400 was enough for 20 ids until a big import made the list long; the reply then stopped mid-list.
+        answer = openrouter.chat(db, "picks", SYSTEM, user, max_tokens=1200)
+        got = answer.get("order") or []
+    except openrouter.AIError as exc:
+        # A reply cut off mid-list still names ids in order: keep the ones that were offered (2026-11-24).
+        got = [int(x) for x in re.findall(r"\d+", exc.text.split("order", 1)[-1])] if exc.text else []
+        if not any(g in allowed for g in got):
+            raise
     order = []
-    for x in answer.get("order") or []:
+    for x in got:
         try:
             i = int(x)
         except (TypeError, ValueError):

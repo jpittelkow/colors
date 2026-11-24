@@ -23,6 +23,12 @@ from .ytdlp import VideoInfo
 MAX_ROWS = 500
 MAX_WATCHED = 1500  # videos from a watch history in one import, most watched first
 PAUSE_S = 1.5  # between YouTube lookups
+# YouTube now and then answers "This video is not available" for a video that plays fine a minute later (it did for
+# about 100 of a 1,250-link watch history on 2026-11-23). Such a lookup is tried again after these pauses.
+RETRY_WAITS_S: tuple[float, ...] = (20, 60)
+# Answers that mean the video is really gone: no point asking again.
+GONE = ("removed by the uploader", "private video", "video is unavailable", "has been terminated", "copyright",
+        "members-only", "join this channel", "age-restricted", "does not exist")
 CHANNEL_RE = re.compile(r"youtube\.com/(@[^/?#\s]+|channel/[^/?#\s]+|c/[^/?#\s]+|user/[^/?#\s]+)", re.I)
 URL_RE = re.compile(r"(https?://[^\s,;<>\"']+|(?:www\.|m\.)?youtube\.com/[^\s,;<>\"']+|youtu\.be/[^\s,;<>\"']+)", re.I)
 HANDLE_RE = re.compile(r"(?<![\w/])@([A-Za-z0-9._-]{3,30})\b")
@@ -206,6 +212,35 @@ def _save_video(c, row_id: int, v: VideoInfo, items: set) -> None:
          int(v.external_id in items), v.url, row_id))
 
 
+def is_gone(error: str) -> bool:
+    """True when YouTube said the video is gone for good, not just "not available" for a moment."""
+    e = (error or "").lower()
+    return any(g in e for g in GONE)
+
+
+def _look(downloader, url: str, limit: int, run):
+    """One lookup, asked again after a pause when YouTube refused it for a moment."""
+    for wait in (*RETRY_WAITS_S, None):
+        try:
+            return downloader.look(url, limit=limit)
+        except Exception as exc:
+            if wait is None or is_gone(str(exc)) or run.stopped():
+                raise
+            time.sleep(wait)
+
+
+def retry_failed(db: Database, iid: int) -> int:
+    """Put the rows that couldn't be read (and aren't gone) back to be read again. Returns how many."""
+    with db.conn() as c:
+        ids = [r["id"] for r in c.execute("SELECT id, error FROM import_rows WHERE import_id = ? AND state = 'failed'",
+                                          (iid,)) if not is_gone(r["error"])]
+        for rid in ids:
+            c.execute("UPDATE import_rows SET state = 'waiting', error = '', kind = '' WHERE id = ?", (rid,))
+        if ids:
+            c.execute("UPDATE imports SET state = 'reading' WHERE id = ?", (iid,))
+    return len(ids)
+
+
 def unfinished(db: Database) -> int | None:
     """The import that was still being read when the server went down, for the job to pick back up."""
     with db.conn() as c:
@@ -236,9 +271,9 @@ def read(run) -> str:
             if kind == "channel":
                 base = subscriptions.channel_base(url)
                 try:
-                    l = downloader.look(base + "/videos", limit=50)
+                    l = _look(downloader, base + "/videos", 50, run)
                 except Exception:  # some channels have no Videos tab (only Shorts or playlists)
-                    l = downloader.look(base, limit=50)
+                    l = _look(downloader, base, 50, run)
                 cid = l.channel_id or (l.videos[0].channel_id if l.videos else "")
                 with db.conn() as c:
                     c.execute(
@@ -249,7 +284,7 @@ def read(run) -> str:
                 if pics and cid and l.avatar_url:
                     pics.fetch(cid, url=l.avatar_url)
             elif kind == "playlist":
-                l = downloader.look(url, limit=200)
+                l = _look(downloader, url, 200, run)
                 with db.conn() as c:
                     for v in l.videos:
                         new = c.execute("INSERT INTO import_rows (import_id, url) VALUES (?, ?)", (iid, v.url)).lastrowid
@@ -257,7 +292,7 @@ def read(run) -> str:
                     c.execute("UPDATE import_rows SET kind = 'playlist', state = 'skipped', title = ? WHERE id = ?",
                               (l.title or "Playlist", r["id"]))
             else:
-                l = downloader.look(url, limit=1)
+                l = _look(downloader, url, 1, run)
                 with db.conn() as c:
                     _save_video(c, r["id"], l.videos[0], items)
         except Exception as exc:

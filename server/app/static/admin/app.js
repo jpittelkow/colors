@@ -1967,6 +1967,26 @@ function importFinished(res, counts) {
     h("strong", {}, "Import finished."), lines.length ? lines.map((l) => h("span", {}, l)) : h("span", {}, "Nothing was added.")));
 }
 
+// Rows that couldn't be read: the ones YouTube refused for a moment can be read again; the gone ones are listed apart.
+function importFailures(id, failed) {
+  if (!failed.length) return null;
+  const again = failed.filter((r) => !r.gone), gone = failed.filter((r) => r.gone);
+  return [
+    again.length ? [h("h2", { class: "kt-label" }, `Couldn't read (${again.length})`),
+      h("p", { class: "kt-muted", style: "margin:0" }, "YouTube sometimes refuses a link for a moment when many are read in a row. Most of these work when read again."),
+      h("button", { class: "kt-btn kt-btn--primary", type: "button", style: "align-self:flex-start", onclick: (e) => run(async () => {
+        busy(e.currentTarget);
+        const r = await api(`/import/${id}/retry`, { method: "POST" });
+        toast(`Reading ${r.retrying} again. They come back here to choose from.`);
+        kickActivity();
+        viewImportRun(id);
+      }) }, again.length === 1 ? "Try it again" : `Try these ${again.length} again`),
+      h("div", { class: "kt-list" }, again.map((r) => row(r.title || r.url, null, r.error)))] : null,
+    gone.length ? [h("h2", { class: "kt-label" }, `Gone from YouTube (${gone.length})`),
+      h("div", { class: "kt-list" }, gone.map((r) => row(r.title || r.url, null, r.error)))] : null,
+  ];
+}
+
 async function viewImportRun(id) {
   const children = profiles.filter((p) => p.kind === "child").map((p) => p.id);
   let opts = { mode: "new", last_n: 10, trusted: false };
@@ -2004,7 +2024,7 @@ async function viewImportRun(id) {
       const counts = { done: 0, skipped: 0, failed: 0 };
       rows.forEach((r) => { if (counts[r.state] !== undefined) counts[r.state]++; });
       fill(body, imp.state === "applying" ? loadingLine(d.note || "Adding…") : importFinished(d.result, counts),
-        rows.filter((r) => r.state === "failed").map((r) => row(r.title || r.url, h("span", { class: "kt-tag kt-tag--bad" }, "Failed"), r.error)),
+        imp.state === "done" ? importFailures(id, rows.filter((r) => r.state === "failed")) : null,
         imp.state === "done" ? h("div", { class: "kt-row" }, h("a", { class: "kt-btn kt-btn--primary", href: "#library" }, "Open the library"), h("a", { class: "kt-btn", href: "#import" }, "Import more")) : null);
       return imp.state === "applying";
     }
@@ -2083,7 +2103,7 @@ async function viewImportRun(id) {
           : "“Approve only” adds the channel for the boys without downloading anything yet."),
         h("div", { class: "panel", style: "padding-top:0; padding-bottom:0" }, chans.map(chanEl))] : null,
       loose.length ? [h("h2", { class: "kt-label" }, `Videos (${loose.length})`), h("div", { class: "panel", style: "padding-top:0; padding-bottom:0" }, loose.map((v) => vidEl(v)))] : null,
-      failed.length ? [h("h2", { class: "kt-label" }, `Couldn't read (${failed.length})`), h("div", { class: "kt-list" }, failed.map((r) => row(r.url, null, r.error)))] : null,
+      importFailures(id, failed),
       n ? h("p", { style: "margin:0" }, [takes ? `${takes} ${takes === 1 ? "video" : "videos"} to download` : null, subs ? `${subs} ${subs === 1 ? "channel" : "channels"} to subscribe to` : null, only ? `${only} approved without downloading` : null].filter(Boolean).join(", ") + ".") : null,
       h("button", { class: "kt-btn kt-btn--primary kt-btn--wide", type: "button", disabled: !n, onclick: (e) => run(async () => {
         busy(e.target);

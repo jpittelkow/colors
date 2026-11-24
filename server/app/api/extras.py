@@ -240,6 +240,7 @@ def import_get(iid: int, request: Request) -> dict:
     for r in rows:
         r["has_pic"] = bool(r["kind"] == "channel" and pics.file(r["channel_id"]))
         r["profile_ids"] = importer.profile_ids_of(r["profile_ids"])
+        r["gone"] = r["state"] == "failed" and importer.is_gone(r["error"])
     runs = _import_runs(request.app.state.registry, iid)
     try:  # what adding did so far: what downloads now and what does not (finish message, and after a Stop)
         result = json.loads(_db(request).get_setting(f"import_result:{iid}") or "null")
@@ -287,6 +288,22 @@ class Choice(BaseModel):
 
 class ApplyIn(BaseModel):
     choices: list[Choice] = Field(max_length=4000)
+
+
+@router.post("/import/{iid}/retry")
+def import_retry(iid: int, request: Request) -> dict:
+    """Read the rows that couldn't be read again (YouTube refuses some lookups for a moment). Gone ones stay."""
+    db, reg = _db(request), request.app.state.registry
+    if "import-read" in reg.running or "import-apply" in reg.running:
+        raise HTTPException(409, "An import is still running. Try again when it has finished.")
+    with db.conn() as c:
+        if not c.execute("SELECT 1 FROM imports WHERE id = ?", (iid,)).fetchone():
+            raise HTTPException(404, "No such import.")
+    n = importer.retry_failed(db, iid)
+    if not n:
+        raise HTTPException(422, "Nothing to try again: the rest are gone from YouTube.")
+    reg.start_job("import-read", by_hand=True, arg=iid)
+    return {"retrying": n}
 
 
 @router.post("/import/{iid}/apply")

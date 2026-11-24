@@ -1,0 +1,10 @@
+{
+  "about": "Every line the TV app says out loud (ADR 0040). `say` goes to the voice; `show` is what the screen prints, the same words without the delivery tag. No child's name, ever (ADR 0034).",
+  "lines": [
+    { "id": "one_more", "say": "[warmly] Pick one more. Then we're all done for today.", "show": "Pick one more. Then we're all done for today." },
+    { "id": "all_done", "say": "[warmly] Great watching! All done for today. See you tomorrow!", "show": "Great watching! All done for today. See you tomorrow!" },
+    { "id": "break", "say": "[warmly] Time for a little break. See you soon!", "show": "Time for a little break. See you soon!" },
+    { "id": "good_night", "say": "[softly] The videos are sleeping. They wake up in the morning. Good night!", "show": "The videos are sleeping. They wake up in the morning. Good night!" },
+    { "id": "stopped", "say": "[warmly] A grown-up says that's all for now. See you soon!", "show": "A grown-up says that's all for now. See you soon!" }
+  ]
+}

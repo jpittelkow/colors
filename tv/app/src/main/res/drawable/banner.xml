@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The launcher banner (320x180): the six dots and the play mark, with "colors" written by the launcher label. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp" android:height="180dp" android:viewportWidth="320" android:viewportHeight="180">
+    <path android:fillColor="#1a0059" android:pathData="M0,0h320v180h-320z" />
+    <path android:fillColor="#7f00bf" android:pathData="M0,140 C60,118 110,112 170,128 C220,140 270,124 320,118 V180 H0 Z" />
+    <path android:fillColor="#ff5a5f" android:pathData="M160,34m-15,0a15,15 0 1,0 30,0a15,15 0 1,0 -30,0" />
+    <path android:fillColor="#ff9f1c" android:pathData="M193,53m-15,0a15,15 0 1,0 30,0a15,15 0 1,0 -30,0" />
+    <path android:fillColor="#ffd23f" android:pathData="M193,91m-15,0a15,15 0 1,0 30,0a15,15 0 1,0 -30,0" />
+    <path android:fillColor="#5cd65c" android:pathData="M160,110m-15,0a15,15 0 1,0 30,0a15,15 0 1,0 -30,0" />
+    <path android:fillColor="#4da3ff" android:pathData="M127,91m-15,0a15,15 0 1,0 30,0a15,15 0 1,0 -30,0" />
+    <path android:fillColor="#b57bff" android:pathData="M127,53m-15,0a15,15 0 1,0 30,0a15,15 0 1,0 -30,0" />
+    <path android:fillColor="#ffffff" android:pathData="M152,58v26l22,-13z" />
+</vector>

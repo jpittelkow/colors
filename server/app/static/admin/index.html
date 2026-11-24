@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f3f5f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#12161b" media="(prefers-color-scheme: dark)">
+<title>colors</title>
+<script>
+// Theme before the first paint, so there is no flash of the wrong one (ADR 0033). Kept per device.
+(function () {
+  var t = null;
+  try { t = localStorage.getItem("kt-theme"); } catch (e) {}
+  if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+})();
+</script>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600&family=Nunito:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="kt.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body class="kt-page">
+<div id="app"></div>
+<div id="activity" class="activity" hidden></div>
+<nav class="kt-nav" id="nav" aria-label="Sections" hidden>
+  <div class="nav-brand kt-wordmark" aria-hidden="true"><span>c</span><span>o</span><span>l</span><span>o</span><span>r</span><span>s</span></div>
+  <a data-tab="library"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="11" rx="2"></rect><path d="M8 20h8"></path></svg>Library</a>
+  <a data-tab="approve"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M8 12.5l2.8 2.8L16.5 9.5"></path></svg>Approve<span class="kt-nav__dot" id="approve-dot" hidden></span></a>
+  <a data-tab="kids"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"></circle><circle cx="17" cy="9.5" r="2.3"></circle><path d="M3.5 19c.6-3.4 2.8-5 5.5-5s4.9 1.6 5.5 5M15 14.6c2.6-.3 4.8 1 5.5 4.4"></path></svg>Kids</a>
+  <a data-tab="downloads"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5"></path><path d="M4.5 19.5h15"></path></svg>Downloads<span class="kt-nav__dot" id="downloads-dot" hidden></span></a>
+  <a data-tab="jobs"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg>Jobs<span class="kt-nav__dot" id="jobs-dot" hidden></span></a>
+  <a data-tab="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 12h4M12 12h8M4 17h12M20 17h0"></path><circle cx="16" cy="7" r="2"></circle><circle cx="10" cy="12" r="2"></circle><circle cx="18" cy="17" r="2"></circle></svg>Settings</a>
+</nav>
+<script type="module" src="app.js"></script>
+</body>
+</html>

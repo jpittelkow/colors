@@ -1,0 +1,66 @@
+# kidtube in Home Assistant (ADR 0020). A package: put it in config/packages/ and include packages in
+# configuration.yaml (homeassistant: packages: !include_dir_named packages).
+#
+# Add to secrets.yaml:
+#   kidtube_auth: "Bearer <the key from the parents' page, More > Home Assistant>"
+# Profile ids: 1 = Sam, 2 = Alex on the home server (check with the status sensor's attributes).
+
+rest:
+  - resource: http://192.168.1.10:8460/api/automation/v1/status
+    headers:
+      Authorization: !secret kidtube_auth
+    scan_interval: 30
+    sensor:
+      - name: kidtube Sam minutes left
+        unique_id: kidtube_sam_minutes_left
+        value_template: "{{ value_json.profiles[0].minutes_left if value_json.profiles[0].minutes_left is not none else 'none' }}"
+        unit_of_measurement: min
+      - name: kidtube Sam minutes today
+        unique_id: kidtube_sam_minutes_today
+        value_template: "{{ value_json.profiles[0].minutes_used_today }}"
+        unit_of_measurement: min
+      - name: kidtube Alex minutes today
+        unique_id: kidtube_alex_minutes_today
+        value_template: "{{ value_json.profiles[1].minutes_used_today }}"
+        unit_of_measurement: min
+      - name: kidtube inbox
+        unique_id: kidtube_inbox
+        value_template: "{{ value_json.inbox_waiting }}"
+    binary_sensor:
+      - name: kidtube someone watching
+        unique_id: kidtube_someone_watching
+        value_template: "{{ value_json.anyone_watching }}"
+
+rest_command:
+  kidtube_everything_off:
+    url: http://192.168.1.10:8460/api/automation/v1/all/lock
+    method: POST
+    headers:
+      Authorization: !secret kidtube_auth
+  kidtube_add_minutes:
+    # data: profile_id, minutes
+    url: "http://192.168.1.10:8460/api/automation/v1/profiles/{{ profile_id }}/extra"
+    method: POST
+    headers:
+      Authorization: !secret kidtube_auth
+    content_type: application/json
+    payload: '{"minutes": {{ minutes | default(10) }}}'
+  kidtube_vacation:
+    # data: on (true/false)
+    url: http://192.168.1.10:8460/api/automation/v1/vacation
+    method: POST
+    headers:
+      Authorization: !secret kidtube_auth
+    content_type: application/json
+    payload: '{"on": {{ on | lower }}}'
+
+automation:
+  - alias: kidtube follows vacation mode
+    id: kidtube_follows_vacation_mode
+    triggers:
+      - trigger: state
+        entity_id: input_boolean.vacation_mode
+    actions:
+      - action: rest_command.kidtube_vacation
+        data:
+          "on": "{{ trigger.to_state.state == 'on' }}"

@@ -1,0 +1,110 @@
+/* kidtube components. CSS only; every value is a token from tokens.css.
+   Calm by default: no boxes around list items, neutral controls, colour comes from thumbnails and channel pictures. */
+
+.kt-page { background: var(--surface-100); color: var(--ink); font-family: var(--font-text); font-size: 15px; line-height: 22px; font-weight: 400; }
+.kt-page *, .kt-page *::before, .kt-page *::after { box-sizing: border-box; }
+.kt-page img { display: block; max-width: 100%; }
+.kt-stack { display: flex; flex-direction: column; gap: var(--space-3); }
+.kt-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.kt-muted { color: var(--ink-muted); font-size: 13px; line-height: 18px; }
+.kt-label { margin: var(--space-6) 0 var(--space-2); font-size: 15px; line-height: 20px; font-weight: 700; color: var(--ink); }
+.kt-label:first-child { margin-top: 0; }
+
+/* Button: neutral fill, no border. Primary is the one blue action. Quiet is text only. */
+.kt-btn { font: inherit; font-size: 15px; line-height: 20px; font-weight: 700; min-height: var(--tap); padding: 0 var(--space-4); border-radius: var(--radius-pill); border: 0; background: var(--surface-300); color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1); text-decoration: none; }
+.kt-btn--primary { background: var(--brand); color: var(--on-brand); }
+.kt-btn--quiet { background: transparent; color: var(--brand); padding: 0 var(--space-2); }
+.kt-btn--danger { background: transparent; color: var(--bad); padding: 0 var(--space-2); }
+.kt-btn--wide { width: 100%; }
+.kt-btn:disabled { opacity: .5; cursor: default; }
+.kt-iconbtn { flex: none; width: var(--tap); height: var(--tap); border: 0; border-radius: var(--radius-pill); background: var(--surface-300); color: var(--ink); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+.kt-iconbtn--primary { background: var(--brand); color: var(--on-brand); }
+.kt-iconbtn svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.kt-btn:focus-visible, .kt-iconbtn:focus-visible, .kt-chip:focus-visible, .kt-switch:focus-visible, .kt-input:focus-visible, .kt-tabs a:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
+
+/* Chip: a choice to toggle (who can see it, a filter). */
+.kt-chip { font: inherit; font-size: 14px; line-height: 20px; font-weight: 600; min-height: 36px; padding: 0 var(--space-3); border-radius: var(--radius-pill); border: 1px solid var(--line); background: var(--surface-200); color: var(--ink); display: inline-flex; align-items: center; cursor: pointer; }
+.kt-chip--on, .kt-chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--surface-200); }
+
+/* Tag: a small status note, used only when it needs attention. */
+.kt-tag { display: inline-flex; align-items: center; font-size: 13px; line-height: 18px; font-weight: 600; padding: 1px var(--space-2); border-radius: var(--radius-sm); background: var(--surface-300); color: var(--ink); }
+.kt-tag--ok { background: var(--ok-soft); color: var(--ok); }
+.kt-tag--warn { background: var(--warn-soft); color: var(--warn); }
+.kt-tag--bad { background: var(--bad-soft); color: var(--bad); }
+
+/* Tabs: switch between views of one list. */
+.kt-tabs { display: flex; gap: var(--space-4); border-bottom: 1px solid var(--line); }
+.kt-tabs a { min-height: var(--tap); display: inline-flex; align-items: center; gap: var(--space-1); color: var(--ink-muted); font-weight: 700; text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.kt-tabs a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--ink); }
+
+/* Switch */
+.kt-switch { flex: none; width: 48px; height: 28px; padding: 0; border: 0; border-radius: var(--radius-pill); background: var(--control-off); position: relative; cursor: pointer; }
+.kt-switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: var(--radius-pill); background: var(--surface-200); }
+.kt-switch[aria-pressed="true"] { background: var(--ok); }
+.kt-switch[aria-pressed="true"]::after { left: 23px; }
+
+/* Field */
+.kt-field { display: flex; flex-direction: column; gap: var(--space-1); }
+.kt-field > label { font-weight: 600; }
+.kt-input { font: inherit; width: 100%; min-height: var(--tap); padding: 0 var(--space-4); border-radius: var(--radius-pill); border: 1px solid var(--line); background: var(--surface-200); color: var(--ink); }
+.kt-input--search { background: var(--surface-300); border-color: transparent; }
+
+/* Thumbnail */
+.kt-thumb { flex: none; width: 148px; aspect-ratio: 16 / 9; border-radius: var(--radius-md); background: var(--surface-300); position: relative; overflow: hidden; }
+.kt-thumb > img { width: 100%; height: 100%; object-fit: cover; }
+.kt-thumb__time { position: absolute; right: 6px; bottom: 6px; padding: 0 5px; border-radius: 4px; background: rgba(0, 0, 0, .78); color: #ffffff; font-size: 12px; line-height: 18px; font-weight: 700; }
+.kt-thumb__seen { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(255, 255, 255, .5); }
+.kt-thumb__seen > i { display: block; height: 100%; background: var(--coral); }
+
+/* Video: a row (thumbnail left) or, with --big, a YouTube-style stacked card. No box around it. */
+.kt-video { display: flex; gap: var(--space-3); align-items: flex-start; }
+.kt-video__body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.kt-video__title { font-size: 15px; line-height: 20px; font-weight: 700; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.kt-video--big { flex-direction: column; gap: var(--space-2); }
+.kt-video--big > .kt-thumb { width: 100%; border-radius: var(--radius-lg); }
+.kt-video--big > .kt-video__meta { display: flex; gap: var(--space-3); align-items: flex-start; }
+.kt-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4) var(--space-3); }
+.kt-grid .kt-video--big > .kt-thumb { border-radius: var(--radius-md); }
+
+/* Channel */
+.kt-channel { display: flex; gap: var(--space-3); align-items: center; }
+.kt-strip { display: flex; gap: var(--space-4); overflow-x: auto; padding-bottom: var(--space-1); }
+.kt-strip > a { flex: none; width: 72px; display: flex; flex-direction: column; align-items: center; gap: var(--space-1); color: var(--ink); text-decoration: none; font-size: 12px; line-height: 16px; font-weight: 600; text-align: center; }
+
+/* Avatar: a picture when there is one, else a letter. */
+.kt-avatar { flex: none; width: 40px; height: 40px; border-radius: var(--radius-pill); background: var(--brand); color: var(--on-brand); font-family: var(--font-display); font-size: 18px; font-weight: 600; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.kt-avatar > img { width: 100%; height: 100%; object-fit: cover; }
+.kt-avatar--sm { width: 32px; height: 32px; font-size: 14px; }
+.kt-avatar--lg { width: 64px; height: 64px; font-size: 26px; }
+.kt-avatar--b { background: var(--ok); }
+.kt-avatar--plain { background: var(--surface-300); color: var(--ink); }
+
+/* SettingsList: one white group, rows split by inset hairlines. */
+.kt-list { border-radius: var(--radius-lg); background: var(--surface-200); overflow: hidden; }
+.kt-list__row { display: flex; align-items: center; gap: var(--space-3); min-height: 52px; padding: var(--space-2) var(--space-4); position: relative; color: inherit; text-decoration: none; }
+.kt-list__row + .kt-list__row::before { content: ""; position: absolute; top: 0; left: var(--space-4); right: 0; border-top: 1px solid var(--line); }
+.kt-list__text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.kt-list__value { margin-left: auto; color: var(--ink-muted); text-align: right; }
+
+/* Banner */
+.kt-banner { padding: var(--space-3) var(--space-4); border-radius: var(--radius-lg); background: var(--brand-soft); color: var(--ink); display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); align-items: center; }
+.kt-banner > span { flex: 1 1 200px; }
+.kt-banner--warn { background: var(--warn-soft); }
+.kt-banner--bad { background: var(--bad-soft); }
+.kt-banner--ok { background: var(--ok-soft); }
+
+/* ProgressBar */
+.kt-bar { height: 6px; border-radius: var(--radius-pill); background: var(--surface-300); overflow: hidden; }
+.kt-bar > i { display: block; height: 100%; border-radius: var(--radius-pill); background: var(--brand); }
+.kt-bar--time > i { background: var(--ok); }
+.kt-bar--low > i { background: var(--bad); }
+
+/* Top bar and bottom navigation */
+.kt-top { display: flex; align-items: center; gap: var(--space-3); min-height: 56px; padding: var(--space-2) var(--space-4); background: var(--surface-100); }
+.kt-top__title { margin: 0; flex: 1; font-family: var(--font-display); font-size: 22px; line-height: 28px; font-weight: 600; }
+.kt-wordmark { font-family: var(--font-display); font-weight: 600; color: var(--brand); }
+.kt-nav { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); background: var(--surface-200); border-top: 1px solid var(--line); }
+.kt-nav > a { min-height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--ink-muted); font-size: 12px; font-weight: 700; text-decoration: none; position: relative; }
+.kt-nav > a svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.kt-nav > a[aria-current="page"] { color: var(--brand); }
+.kt-nav__dot { position: absolute; top: 9px; left: calc(50% + 8px); min-width: 18px; padding: 0 5px; border-radius: var(--radius-pill); background: var(--coral); color: #1b1208; font-size: 11px; line-height: 18px; }

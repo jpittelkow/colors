@@ -1,0 +1,44 @@
+{
+  "lines": [
+    {
+      "id": "one_more",
+      "take": 1,
+      "says": "Pick one more. Then we're all done for today.",
+      "model": "elevenlabs/eleven-v4",
+      "voice": "maisie",
+      "gain_db": 4.0
+    },
+    {
+      "id": "all_done",
+      "take": 1,
+      "says": "Great watching! All done for today. See you tomorrow!",
+      "model": "elevenlabs/eleven-v4",
+      "voice": "maisie",
+      "gain_db": 3.6
+    },
+    {
+      "id": "break",
+      "take": 1,
+      "says": "Time for a little break. See you soon!",
+      "model": "elevenlabs/eleven-v4",
+      "voice": "maisie",
+      "gain_db": 6.8
+    },
+    {
+      "id": "good_night",
+      "take": 1,
+      "says": "The videos are sleeping. They wake up in the morning. Good night!",
+      "model": "elevenlabs/eleven-v4",
+      "voice": "maisie",
+      "gain_db": 5.2
+    },
+    {
+      "id": "stopped",
+      "take": 1,
+      "says": "A grown-up says that's all for now. See you soon!",
+      "model": "elevenlabs/eleven-v4",
+      "voice": "maisie",
+      "gain_db": 6.7
+    }
+  ]
+}

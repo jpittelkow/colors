@@ -1,0 +1,22 @@
+.venv/
+__pycache__/
+*.pyc
+dev-data/
+.pytest_cache/
+*.db
+*.db-wal
+*.db-shm
+cookies.txt
+*.jks
+*.keystore
+.env
+
+# TV app (Gradle)
+tv/.gradle/
+tv/build/
+tv/app/build/
+tv/local.properties
+tv/keystore.properties
+tv/.idea/
+tv/.kotlin/
+deploy.local.env

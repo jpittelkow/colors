@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>kidtube</Name>
+  <Repository>kidtube:latest</Repository>
+  <Registry/>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support/>
+  <Project>https://github.com/jpittelkow/colors</Project>
+  <Overview>colors: a self-hosted kids' video app. Approved YouTube downloads, Plex shows, time limits. Parents' page on the web port.</Overview>
+  <Category>MediaServer:Video</Category>
+  <WebUI>http://[IP]:[PORT:8460]/admin/</WebUI>
+  <TemplateURL/>
+  <Icon/>
+  <ExtraParams>--user 99:100</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <Requires/>
+  <Config Name="Web port" Target="8460" Default="8460" Mode="tcp" Description="Parents' page and the TV app's API" Type="Port" Display="always" Required="true" Mask="false">8460</Config>
+  <Config Name="App data" Target="/data" Default="/mnt/user/appdata/kidtube" Mode="rw" Description="Database, settings, cookies file, your own characters (characters/*.svg)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/kidtube</Config>
+  <Config Name="Video library" Target="/library" Default="/mnt/user/Media/Kids" Mode="rw" Description="Downloaded videos" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/Media/Kids</Config>
+  <Config Name="Admin password (first run)" Target="KIDTUBE_ADMIN_PASSWORD" Default="" Mode="" Description="Sets the parents' password on first start if none is set yet. Ignored after that." Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="Plex URL" Target="KIDTUBE_PLEX_URL" Default="" Mode="" Description="Optional, e.g. http://192.168.1.10:32400" Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="Plex token" Target="KIDTUBE_PLEX_TOKEN" Default="" Mode="" Description="Optional. Read-only use: listing and streaming allowed titles." Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="Time zone" Target="TZ" Default="Etc/UTC" Mode="" Description="Used for day rollover and closed hours" Type="Variable" Display="advanced" Required="false" Mask="false">Etc/UTC</Config>
+</Container>

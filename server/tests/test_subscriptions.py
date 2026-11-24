@@ -94,3 +94,21 @@ def test_kids_and_reports_endpoints(env):
     st = env.client.get("/api/admin/settings").json()
     assert "unboxing" in st["blocked_words"]
     assert env.client.get("/api/admin/plex").json()["connected"] is False
+
+
+def test_a_channels_youtube_list_shows_what_is_not_in_the_library(env):
+    """2026-11-24: the channel page's "Not in library" tab: missing videos, and the ones a parent turned down, noted."""
+    env.fake.channel_videos = [("a", 60), ("b", 60), ("c", 60), ("d", 60)]
+    r = env.client.post("/api/admin/add", json={"urls": ["https://example.test/watch?v=a"], "approve": True}).json()
+    rejected = env.client.post("/api/admin/add", json={"urls": ["https://example.test/watch?v=b"]}).json()["added"][0]
+    env.client.patch(f"/api/admin/items/{rejected}", json={"approval": "hidden"})
+    waiting = env.client.post("/api/admin/add", json={"urls": ["https://example.test/watch?v=c"]}).json()["added"][0]
+    env.run_jobs()
+    with env.db.conn() as c:
+        cid = c.execute("SELECT container_id FROM items WHERE id = ?", (rejected,)).fetchone()[0]
+        c.execute("UPDATE containers SET url = 'https://www.youtube.com/channel/UCtrains' WHERE id = ?", (cid,))
+    got = env.client.get(f"/api/admin/channels/{cid}/youtube").json()
+    assert got["url"] == "https://www.youtube.com/channel/UCtrains" and got["in_library"] == 1  # "a" is approved
+    assert [(v["external_id"], v["state"]) for v in got["videos"]] == [("b", "rejected"), ("c", "waiting"), ("d", "missing")]
+    assert next(v for v in got["videos"] if v["state"] == "rejected")["item_id"] == rejected
+    assert waiting and r["added"]

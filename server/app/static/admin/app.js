@@ -805,6 +805,7 @@ async function viewChannel(id, tab = "library") {
         h("div", { class: "kt-row" }, tags),
         h("div", { class: "kt-row" },
           local ? h("a", { class: "kt-btn" + (sub ? "" : " kt-btn--primary"), href: `#channel-settings/${id}` }, sub ? "Subscription settings" : "Subscribe") : null,
+          local && c.url ? h("a", { class: "kt-btn", href: c.url, target: "_blank", rel: "noopener noreferrer" }, "Open on YouTube ↗") : null,
           sub ? h("button", { class: "kt-btn", type: "button", onclick: (e) => run(async () => {
             busy(e.currentTarget);
             const r = await api(`/subscriptions/${sub.id}/check`, { method: "POST" });
@@ -835,15 +836,58 @@ async function viewChannel(id, tab = "library") {
     profileChips(pids, (next) => run(async () => { pids = next; await api(`/channels/${id}`, { method: "PATCH", body: { profile_ids: next } }); toast(`${c.title}: ${next.length ? "for " + namesOf(next) : "nobody for now"}`); })),
     h("nav", { class: "kt-tabs", "aria-label": "Videos" },
       h("a", { href: `#channel/${id}`, "aria-current": tab === "library" ? "page" : null }, `Approved ${approved.length || ""}`.trim()),
-      h("a", { href: `#channel/${id}/waiting`, "aria-current": tab === "waiting" ? "page" : null }, `Waiting ${waiting.length || ""}`.trim())),
-    shown.length ? h("div", { class: "kt-grid" }, shown.slice((chanPage.page - 1) * PAGE, chanPage.page * PAGE).map((it) =>
+      h("a", { href: `#channel/${id}/waiting`, "aria-current": tab === "waiting" ? "page" : null }, `Waiting ${waiting.length || ""}`.trim()),
+      local ? h("a", { href: `#channel/${id}/youtube`, "aria-current": tab === "youtube" ? "page" : null }, "Not in library") : null),
+    tab === "youtube" ? youtubeTab(id, () => pids) : shown.length ? h("div", { class: "kt-grid" }, shown.slice((chanPage.page - 1) * PAGE, chanPage.page * PAGE).map((it) =>
       h("a", { class: "kt-video kt-video--big linkish", href: `#video/${it.id}` },
         thumb(it.has_thumb ? `/api/admin/items/${it.id}/thumb` : it.thumb_url, { time: it.duration_s }),
         h("div", { class: "kt-video__title" }, it.title),
         it.status !== "ready" ? h("span", { class: "kt-tag" + (it.status === "failed" ? " kt-tag--bad" : ""), style: "align-self:flex-start" }, it.play_note || (it.status === "failed" ? "Download failed" : "Downloading")) : null)))
       : h("div", { class: "empty" }, tab === "waiting" ? "Nothing waiting." : sub ? "No approved videos yet. New ones will show up here." : "No approved videos yet."),
-    pager(chanPage.page, Math.ceil(shown.length / PAGE), (n) => { chanPage.page = n; viewChannel(id, tab).then(() => window.scrollTo(0, 0)); }),
+    tab === "youtube" ? null : pager(chanPage.page, Math.ceil(shown.length / PAGE), (n) => { chanPage.page = n; viewChannel(id, tab).then(() => window.scrollTo(0, 0)); }),
     tab === "waiting" && waiting.length ? h("a", { class: "kt-btn", href: "#approve", style: "align-self:flex-start" }, "Go through them in Approve") : null);
+}
+
+// The channel's videos on YouTube that aren't in the library (2026-11-24): missing ones can be added, and ones a
+// parent turned down are marked. The newest 60 first; more, or the whole channel, on request (YouTube gives ~30 per
+// request, so a big channel is about a minute; the server keeps the list for an hour).
+function youtubeTab(id, pidsNow) {
+  const box = h("div", { class: "kt-stack", style: "gap:12px" });
+  let limit = 60;
+  const card = (v) => {
+    const actions = h("div", { class: "kt-row" });
+    if (v.state === "missing") actions.append(h("button", { class: "kt-btn kt-btn--primary", type: "button", onclick: (e) => run(async () => {
+      busy(e.currentTarget);
+      const r = await api("/add", { method: "POST", body: { urls: [v.url], approve: true, profile_ids: pidsNow() } });
+      if (r.failed && r.failed.length) throw new Error(r.failed[0].error);
+      fill(actions, h("span", { class: "kt-tag kt-tag--ok" }, "Added: downloading"));
+      kickActivity();
+    }) }, "Add"));
+    else actions.append(h("a", { class: "kt-tag" + (v.state === "rejected" || v.state === "failed" ? " kt-tag--bad" : ""), href: `#video/${v.item_id}` },
+      { rejected: "Rejected", waiting: "Waiting in Approve", failed: "Download failed" }[v.state]));
+    return h("div", { class: "kt-video kt-video--big" },
+      h("a", { href: v.url, target: "_blank", rel: "noopener noreferrer" }, thumb(v.thumb_url, { time: v.duration_s })),
+      h("a", { class: "kt-video__title linkish", href: v.url, target: "_blank", rel: "noopener noreferrer" }, v.title),
+      v.upload_date ? h("div", { class: "kt-muted" }, `${v.upload_date.slice(0, 4)}-${v.upload_date.slice(4, 6)}-${v.upload_date.slice(6, 8)}`) : null,
+      actions);
+  };
+  const load = async () => {
+    fill(box, loadingLine(limit > 300 ? "Reading the whole channel on YouTube. A big channel takes about a minute." : "Reading the channel on YouTube…"), skelGrid(4));
+    let r;
+    try {
+      r = await api(`/channels/${id}/youtube?limit=${limit}`);
+    } catch (e) {
+      return fill(box, h("div", { class: "kt-banner kt-banner--warn" }, h("span", {}, e.message)));
+    }
+    fill(box,
+      h("p", { class: "kt-muted", style: "margin:0" }, `The newest ${r.checked} on YouTube: ${r.in_library} in the library, ${r.videos.length} not.`),
+      r.videos.length ? h("div", { class: "kt-grid" }, r.videos.map(card)) : h("div", { class: "empty" }, "Everything checked is in the library."),
+      r.more ? h("div", { class: "kt-row", style: "justify-content:center" },
+        h("button", { class: "kt-btn", type: "button", onclick: () => { limit += 60; load(); } }, "Show 60 more"),
+        h("button", { class: "kt-btn", type: "button", onclick: () => { limit = 5000; load(); } }, "Load everything")) : null);
+  };
+  load();
+  return box;
 }
 
 // ---- One video ----------------------------------------------------------------------------------------------------

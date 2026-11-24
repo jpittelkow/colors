@@ -90,6 +90,68 @@ def channel(cid: int, request: Request) -> dict:
     }
 
 
+# A channel's YouTube list, kept for a while: switching tabs shouldn't ask YouTube again (2026-11-24). YouTube hands a
+# channel out about 30 videos per request, so "everything" for a big channel is ~100 requests: asked for on purpose,
+# and kept for an hour.
+_YT_LISTS: dict[int, tuple[float, int, list]] = {}
+YT_LIST_S = 3600
+YT_MOST = 5000
+
+
+@router.get("/channels/{cid}/youtube")
+def channel_youtube(cid: int, request: Request, limit: int = 60, fresh: bool = False) -> dict:
+    """The channel's newest videos on YouTube that are not in the library as approved: missing ones, ones a parent
+    turned down, ones waiting in Approve, and failed downloads. For the channel page's "Not in library" tab."""
+    limit = max(10, min(limit, YT_MOST))
+    with _db(request).conn() as c:
+        row = c.execute("SELECT source, external_id, url FROM containers WHERE id = ?", (cid,)).fetchone()
+    if not row:
+        raise HTTPException(404, "No such channel.")
+    if row["source"] != "local":
+        raise HTTPException(422, "Only YouTube channels have a YouTube list.")
+    url = jobs.channel_url(row["external_id"], row["url"] or "")
+    if not url:
+        raise HTTPException(422, "This channel has no YouTube address.")
+    got = _YT_LISTS.get(cid)
+    if got and not fresh and time.time() - got[0] < YT_LIST_S and got[1] >= limit:
+        videos = got[2][:limit]
+    else:
+        base = subscriptions.channel_base(url)
+        downloader = request.app.state.downloader
+        try:
+            try:
+                videos = downloader.look(base + "/videos", limit=limit).videos
+            except Exception:  # a channel with only Shorts or playlists has no Videos tab
+                videos = downloader.look(base, limit=limit).videos
+        except Exception as exc:
+            raise HTTPException(502, f"Couldn't read the channel on YouTube: {exc}")
+        _YT_LISTS[cid] = (time.time(), limit, videos)
+    with _db(request).conn() as c:
+        known = {r["external_id"]: r for r in c.execute(
+            "SELECT id, external_id, approval, status FROM items WHERE source = 'local'")}
+    out, in_library = [], 0
+    for v in videos:
+        k = known.get(v.external_id)
+        if k is None:
+            state = "missing"
+        elif k["approval"] == "hidden":
+            state = "rejected"
+        elif k["approval"] == "waiting":
+            state = "waiting"
+        elif k["status"] == "failed":
+            state = "failed"
+        else:
+            in_library += 1
+            continue
+        out.append({"external_id": v.external_id, "url": v.url, "title": v.title, "duration_s": v.duration_s,
+                    "upload_date": v.upload_date, "is_short": v.is_short,
+                    # A quick channel listing has no thumbnail address; YouTube's is fixed by the video id.
+                    "thumb_url": v.thumb_url or f"https://i.ytimg.com/vi/{v.external_id}/mqdefault.jpg",
+                    "state": state, "item_id": k["id"] if k is not None else None})
+    return {"url": url, "checked": len(videos), "in_library": in_library, "more": len(videos) >= limit and limit < YT_MOST,
+            "videos": out}
+
+
 class ChannelPatch(BaseModel):
     trusted: bool | None = None
     rested_until: str | None = Field(default=None, pattern=r"^(\d{4}-\d{2}-\d{2})?$")

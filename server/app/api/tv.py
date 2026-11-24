@@ -231,6 +231,24 @@ def shelf(kind: str, profile_id: int, request: Request, device_id: int = Depends
     return {"id": 0, "title": SHELVES[kind], "cards": [_card(r, profile_id) for r in _only_lastone(ctx, rows)]}
 
 
+@router.get("/search")
+def search(profile_id: int, q: str, request: Request, device_id: int = Depends(device)) -> dict:
+    """Search this child's own library: what they may watch right now, by title or channel (2026-11-24). Never
+    YouTube: nothing new reaches the TV this way (ADR 0022)."""
+    words = [w for w in q.lower().split() if w][:8]
+    with _db(request).conn() as c:
+        _profile(c, profile_id)
+        ctx = clock.context(c, profile_id)
+        rows = _only_lastone(ctx, pipeline.visible_items(c, profile_id, ctx=ctx, order="new", limit=5000))
+    if not words:
+        return {"id": 0, "title": "", "cards": []}
+    hay = lambda r: f"{r['title']} {r['container_title']}".lower()
+    hits = [r for r in rows if all(w in hay(r) for w in words)]
+    # Title matches before channel-only matches; otherwise newest first, as the rows are.
+    hits.sort(key=lambda r: not all(w in r["title"].lower() for w in words))
+    return {"id": 0, "title": q.strip()[:60], "cards": [_card(r, profile_id) for r in hits[:60]]}
+
+
 def _only_lastone(ctx: clock.Context, rows: list) -> list:
     """Once the last one is chosen, every list shows only that video."""
     return rows if ctx.lastone_item is None else [r for r in rows if r["id"] == ctx.lastone_item]

@@ -120,6 +120,13 @@ class Api(context: Context) {
         return Container(0, o.getString("title"), o.getJSONArray("cards").objects().map(::card))
     }
 
+    /** Search this child's own library (titles and channels); never YouTube. */
+    suspend fun search(query: String, profileId: Int): List<Card> {
+        val q = java.net.URLEncoder.encode(query, "UTF-8")
+        val o = call("GET", "/search?profile_id=$profileId&q=$q") as JSONObject
+        return o.getJSONArray("cards").objects().map(::card)
+    }
+
     suspend fun upNext(profileId: Int, itemId: Int): Pair<Int, List<Card>> {
         val o = call("GET", "/upnext?profile_id=$profileId&item_id=$itemId") as JSONObject
         return o.optInt("autoplay_n", 2) to o.getJSONArray("cards").objects().map(::card)

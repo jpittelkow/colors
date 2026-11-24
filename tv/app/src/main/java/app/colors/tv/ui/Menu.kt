@@ -49,10 +49,29 @@ import app.colors.tv.data.Container
 import app.colors.tv.data.Profile
 import app.colors.tv.data.TimeState
 import coil3.compose.AsyncImage
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
+import app.colors.tv.data.Card
+import kotlinx.coroutines.delay
 
 /** The pages in the side menu. Home is the rows; the rest are whole lists (server: /channels, /shelf/<kind>). */
 enum class Menu(val label: String, val icon: String, val kind: String?) {
     Home("Home", Icons.Home, null),
+    Search("Search", Icons.Search, null),
     Channels("Channels", Icons.Channels, null),
     Recent("Recently watched", Icons.Recent, "recent"),
     Picked("Recommended", Icons.Star, "picked"),
@@ -68,6 +87,7 @@ fun openMenu(nav: Nav, profile: Profile, from: Menu, to: Menu) {
     val target = when (to) {
         Menu.Home -> return nav.back()
         Menu.Channels -> Screen.Channels(profile)
+        Menu.Search -> Screen.Search(profile)
         else -> Screen.Shelf(profile, to.kind!!)
     }
     if (from == Menu.Home) nav.go(target) else nav.replace(target)
@@ -120,15 +140,15 @@ fun SideRail(nav: Nav, profile: Profile, current: Menu, modifier: Modifier = Mod
         Spacer(Modifier.height(s(22)))
         Menu.entries.forEach { m ->
             val here = m == current
-            Focusable({ openMenu(nav, profile, current, m) }, Modifier.width(s(RAIL)).height(s(112))) { focused ->
+            Focusable({ openMenu(nav, profile, current, m) }, Modifier.width(s(RAIL)).height(s(100))) { focused ->
                 Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(s(4))) {
                     Box(
-                        Modifier.size(s(66)).clip(CircleShape).background(
+                        Modifier.size(s(60)).clip(CircleShape).background(
                             when { focused -> C.Plate; here -> Color.White.copy(alpha = .16f); else -> Color.Transparent },
                         ),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(m.icon, 38, if (focused) C.Rail else if (here) Color.White else C.Plate.copy(alpha = .78f), filled = m == Menu.Home)
+                        Icon(m.icon, 34, if (focused) C.Rail else if (here) Color.White else C.Plate.copy(alpha = .78f), filled = m == Menu.Home)
                     }
                     BasicText(
                         m.label, Modifier.padding(horizontal = s(8)),
@@ -212,6 +232,76 @@ fun ShelfScreen(nav: Nav, profile: Profile, kind: String) {
         }
         LaunchedEffect(p.cards.size) { first.soon() }
     }
+}
+
+// ---- Search: this child's own library only ------------------------------------------------------------------------
+
+@Composable
+fun SearchScreen(nav: Nav, profile: Profile) {
+    val s = LocalScale.current
+    var field by remember { mutableStateOf(TextFieldValue("")) }
+    val query = field.text
+    var results by remember { mutableStateOf<List<Card>?>(null) }
+    var col by remember { mutableIntStateOf(0) }
+    val box = remember { FocusRequester() }
+    val firstResult = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
+    // Ask once typing (or speaking) pauses, not on every letter.
+    LaunchedEffect(query) {
+        if (query.isBlank()) { results = null; return@LaunchedEffect }
+        delay(350)
+        results = try { nav.api.search(query, profile.id) } catch (e: Exception) { emptyList() }
+    }
+    MenuFrame(nav, profile, Menu.Search, menuWanted = col == 0, time = null) {
+        Row(
+            Modifier.offset(x = s(84), y = s(66)).width(s(1120)).height(s(96)).clip(RoundedCornerShape(s(48)))
+                .background(C.Plate).padding(horizontal = s(36)),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(s(20)),
+        ) {
+            Icon(Icons.Search, 44, C.Rail)
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                if (query.isEmpty()) BasicText("Search your videos", style = text(36, FontWeight.Medium, color = C.Muted))
+                BasicTextField(
+                    field, { field = if (it.text.length <= 60) it else field },
+                    Modifier.fillMaxWidth().focusRequester(box).onFocusChanged { if (it.isFocused) col = 0 }
+                        // The box keeps the arrows for its cursor; Down still goes to the results and Left, from the
+                        // start of the text, to the menu.
+                        .onPreviewKeyEvent { e ->
+                            if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                            when {
+                                e.key == Key.DirectionDown -> {
+                                    keyboard?.hide()
+                                    if (results.isNullOrEmpty()) false else runCatching { firstResult.requestFocus() }.isSuccess
+                                }
+                                e.key == Key.DirectionLeft && field.selection.start == 0 -> focus.moveFocus(FocusDirection.Left)
+                                else -> false
+                            }
+                        },
+                    textStyle = text(36, FontWeight.Medium, color = C.OnPlate), singleLine = true,
+                    cursorBrush = SolidColor(C.Rail),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { keyboard?.hide(); runCatching { firstResult.requestFocus() } }),
+                )
+            }
+        }
+        val r = results
+        when {
+            r == null -> Empty("Type, or press the mic on the remote and say it.")
+            r.isEmpty() -> Empty("Nothing found for “$query”.")
+            else -> LazyVerticalGrid(
+                GridCells.Fixed(3), Modifier.fillMaxSize().padding(top = s(210)),
+                contentPadding = PaddingValues(start = s(72), end = s(72), bottom = s(200)),
+                horizontalArrangement = Arrangement.spacedBy(s(12)), verticalArrangement = Arrangement.spacedBy(s(40)),
+            ) {
+                itemsIndexed(r, key = { _, c -> c.id }) { i, c ->
+                    VideoCard(c, { startPlaying(nav, profile, c) }, if (i == 0) Modifier.focusRequester(firstResult) else Modifier,
+                        onFocus = { col = i % 3 })
+                }
+            }
+        }
+    }
+    LaunchedEffect(Unit) { box.soon() }
 }
 
 @Composable

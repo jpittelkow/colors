@@ -17,6 +17,7 @@ import app.colors.tv.data.Api
 import app.colors.tv.ui.C
 import app.colors.tv.ui.ChannelScreen
 import app.colors.tv.ui.ChannelsScreen
+import app.colors.tv.ui.SearchScreen
 import app.colors.tv.ui.ShelfScreen
 import app.colors.tv.ui.HomeScreen
 import app.colors.tv.ui.Nav
@@ -89,6 +90,7 @@ class MainActivity : ComponentActivity() {
                         is Screen.Home -> HomeScreen(nav, sc.profile)
                         is Screen.Channel -> ChannelScreen(nav, sc.profile, sc.containerId)
                         is Screen.Channels -> ChannelsScreen(nav, sc.profile)
+                        is Screen.Search -> SearchScreen(nav, sc.profile)
                         is Screen.Shelf -> ShelfScreen(nav, sc.profile, sc.kind)
                         is Screen.Player -> PlayerScreen(nav, sc.profile, sc.itemId, sc.chain)
                         is Screen.Stopped -> StoppedScreen(nav, sc.profile, sc.time, sc.note)

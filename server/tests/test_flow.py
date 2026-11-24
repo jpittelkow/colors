@@ -169,3 +169,19 @@ def test_menu_lists_channels_recent_recommended_and_new(env):
 
     env.client.patch(f"/api/admin/items/{b}", json={"approval": "hidden"})
     assert shelf("new") == [a] and shelf("picked") == []  # the same filtering as the home rows
+
+
+def test_tv_search_finds_only_what_this_child_may_watch(env):
+    sam, alex = _profile(env, "Sam"), _profile(env, "Alex")
+    tv = env.pair()["client"]
+    a = _add(env, "trucks", approve=True)  # every child profile by default
+    b = _add(env, "boats", approve=True)
+    _add(env, "zebra")  # not approved
+    env.run_jobs()
+    find = lambda q, p=sam: [c["id"] for c in tv.get(f"{V}/search", params={"profile_id": p, "q": q}).json()["cards"]]
+    assert find("video trucks") == [a]  # every word must match, in the title or the channel
+    assert sorted(find("VIDEO")) == sorted([a, b])
+    assert find("zebra") == [] and find("") == []  # not approved: never found
+    assert sorted(find("trains")) == sorted([a, b])  # the channel's name counts too (the fake channel is "Trains")
+    env.client.patch(f"/api/admin/items/{b}", json={"approval": "hidden"})
+    assert find("boats") == []  # the same filtering as the home rows

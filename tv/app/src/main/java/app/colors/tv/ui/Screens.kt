@@ -81,6 +81,7 @@ sealed interface Screen {
     data class Channel(val profile: Profile, val containerId: Int) : Screen
     /** The menu's pages besides Home (Menu.kt). */
     data class Channels(val profile: Profile) : Screen
+    data class Search(val profile: Profile) : Screen
     data class Shelf(val profile: Profile, val kind: String) : Screen
     data class Player(val profile: Profile, val itemId: Int, val chain: Int = 0) : Screen
     data class Stopped(val profile: Profile, val time: TimeState?, val note: String = "") : Screen

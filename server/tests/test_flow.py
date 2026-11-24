@@ -139,7 +139,7 @@ def test_library_lists_filter_by_boy_page_and_decide_in_bulk(env):
     waiting = env.client.get("/api/admin/items", params={"approval": "waiting", "hide_failed": True}).json()
     assert sorted(i["id"] for i in waiting) == sorted(ids)  # the failed download is not asked about
     assert waiting[0]["container_external_id"] == "chan1" and waiting[0]["container_source"] == "local"
-    assert env.client.post("/api/admin/items/decide", json={"ids": ids[:2], "approval": "approved"}).json() == {"decided": 2}
+    assert env.client.post("/api/admin/items/decide", json={"ids": ids[:2], "approval": "approved"}).json() == {"decided": 2, "stopped": 0}
     assert env.client.post("/api/admin/items/decide", json={"ids": ids[2:], "approval": "hidden"}).status_code == 200
     approved = lambda **p: [i["id"] for i in env.client.get("/api/admin/items", params={"approval": "approved", **p}).json()]
     assert sorted(approved(profile_id=sam)) == sorted(ids[:2]) and approved(profile_id=alex) == []

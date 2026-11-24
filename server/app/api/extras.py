@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from .. import channel_pics
 from ..db import Database
-from ..downloads import importer
+from ..downloads import importer, pacing
 from . import downloads as downloads_api
 from .admin import require_admin
 
@@ -92,7 +92,16 @@ def activity(request: Request) -> dict:
         "downloads_paused": db.get_setting("downloads_paused") == "1",
         "storage_full": db.get_setting("storage_full") == "1",
         "checks_paused": db.get_setting("checks_paused") == "1",
+        # YouTube said "not a bot": downloads wait until then (pacing). None when there is no break.
+        "youtube_break": pacing.status(db),
     }
+
+
+@router.post("/youtube-break/end")
+def youtube_break_end(request: Request) -> dict:
+    """A parent says go on now, before the break is over."""
+    pacing.end_break(_db(request))
+    return {"ok": True}
 
 
 @router.get("/background-jobs")

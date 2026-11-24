@@ -14,7 +14,7 @@ from pathlib import Path
 
 from ..curation import blocklist
 from ..db import Database
-from . import progress
+from . import pacing, progress
 from .ytdlp import VideoInfo
 
 log = logging.getLogger("kidtube.jobs")
@@ -145,6 +145,8 @@ def retry_failed(db: Database, *, max_attempts: int | None = None) -> int:
            "WHERE j.state = 'failed' AND j.stopped = 0 AND i.approval <> 'hidden'")
     if max_attempts is not None:
         sql += f" AND j.attempts < {int(max_attempts)}"
+    if max_attempts is not None and pacing.blocked_until(db):
+        return 0  # on a break from YouTube: the next run puts them back
     with db.conn() as c:
         ids = [r[0] for r in c.execute(sql)]
     for i in ids:
@@ -216,7 +218,9 @@ def _subtitle(file_path: Path) -> Path | None:
 
 
 def run_one(db: Database, downloader, library_dir: Path) -> bool:
-    """Run the oldest queued job. Returns False when the queue is empty."""
+    """Run the oldest queued job. Returns False when the queue is empty (or on a break from YouTube)."""
+    if pacing.blocked_until(db):
+        return False
     with db.conn() as c:
         job = c.execute(
             "SELECT j.id, j.item_id, i.url, i.external_id FROM jobs j JOIN items i ON i.id = j.item_id "
@@ -302,6 +306,7 @@ def run_one(db: Database, downloader, library_dir: Path) -> bool:
                 "WHERE id = ?",
                 (size, time.time(), job_id),
             )
+        pacing.note_success(db)
     except progress.Cancelled:
         log.info("download stopped by a parent for item %s", job["item_id"])
         _clean_partial(library_dir, job["external_id"])
@@ -311,6 +316,13 @@ def run_one(db: Database, downloader, library_dir: Path) -> bool:
                 (time.time(), job_id))
             c.execute("UPDATE items SET status = 'failed' WHERE id = ?", (job["item_id"],))
     except Exception as exc:  # a failed download must never stop the queue
+        if pacing.is_block(exc):  # YouTube wants a break: not this video's fault, so no try is used up
+            until = pacing.note_block(db)
+            log.warning("YouTube asked for a break (%s); downloads wait until %s", str(exc)[:120], time.ctime(until))
+            with db.conn() as c:
+                c.execute("UPDATE jobs SET state = 'queued', progress = 0, attempts = max(attempts - 1, 0), "
+                          "error = ?, retry_at = NULL WHERE id = ?", (str(exc)[:2000], job_id))
+            return True
         with db.conn() as c:
             tries = c.execute("SELECT attempts FROM jobs WHERE id = ?", (job_id,)).fetchone()[0]
             if tries <= len(RETRY_DELAYS):  # wait a little and try again before calling it failed
@@ -344,7 +356,7 @@ def storage_full(db: Database, library_dir: Path) -> bool:
 
 
 class Worker(threading.Thread):
-    def __init__(self, db: Database, downloader, library_dir: Path, delay_s: float = 5.0):
+    def __init__(self, db: Database, downloader, library_dir: Path, delay_s: float = pacing.BETWEEN_S):
         super().__init__(name="kidtube-downloads", daemon=True)
         self.db, self.downloader, self.library_dir, self.delay_s = db, downloader, library_dir, delay_s
         self._halt = threading.Event()
@@ -355,7 +367,7 @@ class Worker(threading.Thread):
         with self.db.conn() as c:  # jobs cut off by a restart go back in the queue
             c.execute("UPDATE jobs SET state = 'queued', progress = 0 WHERE state = 'running'")
         while not self._halt.is_set():
-            if self.db.get_setting("downloads_paused") == "1":
+            if self.db.get_setting("downloads_paused") == "1" or pacing.blocked_until(self.db):
                 self._halt.wait(5)
                 continue
             if time.time() - self._size_checked > 60:

@@ -45,3 +45,15 @@ without saving: fragile, needs internet, and videos vanish when YouTube removes 
 ## Where it lives
 
 `server/app/downloads/` (`search.py`, `jobs.py`, `subscriptions.py`, `scheduler.py`, `ytdlp_update.py`).
+
+## Revision 2026-11-24: a break when YouTube says "not a bot"
+
+The 6-hourly retry put 287 failed downloads back at once; the queue ran them back to back and YouTube answered
+"Sign in to confirm you're not a bot" to every one, so 377 failed in two hours, each tried three times.
+
+- That answer (and HTTP 429) is not the video's fault: the download goes back in the queue without using a try, and
+  the whole queue takes a break: 1 hour, 3 hours if it happens again within a day, then 6 hours. A download that
+  works ends the streak (`server/app/downloads/pacing.py`).
+- During a break nothing downloads and the 6-hourly retry waits. The activity data says until when; a parent can end
+  the break early (`POST /api/admin/youtube-break/end`).
+- 15 seconds between downloads, so a long queue is not one long burst.

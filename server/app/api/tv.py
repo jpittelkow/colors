@@ -5,6 +5,8 @@ Rule for this file, checked by tests/test_guards.py: every route that returns it
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -114,6 +116,24 @@ def _profile(c, profile_id: int):
 def profiles(request: Request, device_id: int = Depends(device)) -> list[dict]:
     with _db(request).conn() as c:
         return [_profile_out(r) for r in c.execute(f"SELECT {PROFILE_COLUMNS} FROM profiles ORDER BY position, id")]
+
+
+@router.get("/stamp")
+def stamp(profile_id: int, request: Request, device_id: int = Depends(device)) -> dict:
+    """A short code that changes whenever this child's limits or today's parent actions change (a limit started,
+    extra time, last one, end now, unlock), and once a minute while time runs out. The TV asks every few seconds
+    and reloads what it shows only when the code changes (2026-11-24: a limit takes effect at once)."""
+    now = time.time()
+    with _db(request).conn() as c:
+        _profile(c, profile_id)
+        ovr = [tuple(r) for r in c.execute(
+            "SELECT id, kind, minutes, ends_at, note, done FROM overrides WHERE profile_id = ? AND day = ? ORDER BY id",
+            (profile_id, clock.day_key(now)))]
+        lim = clock.get_limits(c, profile_id)
+        ctx = clock.context(c, profile_id, now)
+    left = None if not ctx.limited or ctx.left_s is None else int(ctx.left_s // 60)
+    raw = json.dumps([ovr, lim, ctx.open, left], sort_keys=True, default=str)
+    return {"stamp": hashlib.sha1(raw.encode()).hexdigest()[:12]}
 
 
 @router.get("/home")

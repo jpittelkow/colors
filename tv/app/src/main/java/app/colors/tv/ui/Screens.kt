@@ -87,6 +87,27 @@ sealed interface Screen {
     data class Stopped(val profile: Profile, val time: TimeState?, val note: String = "") : Screen
 }
 
+/**
+ * Goes up by one whenever the server's stamp for this child changes: a parent started a limit, gave extra time, said
+ * last one, ended or unlocked (2026-11-24). Screens key their loading on it, so a limit takes effect within seconds.
+ */
+@Composable
+fun rememberLimitStamp(nav: Nav, profileId: Int): Int {
+    var version by remember { mutableIntStateOf(0) }
+    LaunchedEffect(profileId) {
+        var last: String? = null
+        while (true) {
+            val now = runCatching { nav.api.stamp(profileId) }.getOrNull()
+            if (now != null) {
+                if (last != null && now != last) version++
+                last = now
+            }
+            delay(5_000)
+        }
+    }
+    return version
+}
+
 /** Ask the server for playback; a refusal because time is up goes to the time-up screen (ADR 0017). */
 fun startPlaying(nav: Nav, profile: Profile, card: Card) = nav.go(Screen.Player(profile, card.id))
 
@@ -246,7 +267,8 @@ fun HomeScreen(nav: Nav, profile: Profile) {
     val peekPx = with(LocalDensity.current) { s(432).roundToPx() }
 
     // Fresh rows on arrival and every minute, so a video that no longer fits drops out (ADR 0012).
-    LaunchedEffect(profile.id) {
+    val stamp = rememberLimitStamp(nav, profile.id)
+    LaunchedEffect(profile.id, stamp) {
         while (true) {
             try {
                 val h = nav.api.home(profile.id)
@@ -333,7 +355,8 @@ fun ChannelScreen(nav: Nav, profile: Profile, containerId: Int) {
     val s = LocalScale.current
     var page by remember { mutableStateOf<Container?>(null) }
     val first = remember { FocusRequester() }
-    LaunchedEffect(containerId) {
+    val stamp = rememberLimitStamp(nav, profile.id)
+    LaunchedEffect(containerId, stamp) {
         page = try { nav.api.container(containerId, profile.id) } catch (e: Exception) { nav.back(); null }
     }
     val p = page
@@ -368,10 +391,15 @@ fun StoppedScreen(nav: Nav, profile: Profile, time: TimeState?, note: String) {
         else -> Triple("All done for today!", "Great watching! All done for today. See you tomorrow!", R.raw.voice_all_done)
     }
     val first = remember { FocusRequester() }
-    LaunchedEffect(Unit) {
-        nav.say(clip)
-        // A parent may add time from the phone: come back by itself when the app opens again.
+    LaunchedEffect(Unit) { nav.say(clip) }
+    // A parent may add time or unlock from the phone: come back by itself as soon as watching is allowed again.
+    val stamp = rememberLimitStamp(nav, profile.id)
+    LaunchedEffect(stamp) {
         while (true) {
+            if (stamp > 0) {
+                val h = try { nav.api.home(profile.id) } catch (e: Exception) { null }
+                if (h != null && h.time.open) return@LaunchedEffect nav.replace(Screen.Home(profile))
+            }
             delay(20_000)
             val h = try { nav.api.home(profile.id) } catch (e: Exception) { null }
             if (h != null && h.time.open) return@LaunchedEffect nav.replace(Screen.Home(profile))

@@ -127,6 +127,10 @@ class Api(context: Context) {
         return o.getJSONArray("cards").objects().map(::card)
     }
 
+    /** A code that changes when this child's limits or today's parent actions change: reload when it does. */
+    suspend fun stamp(profileId: Int): String =
+        (call("GET", "/stamp?profile_id=$profileId") as JSONObject).getString("stamp")
+
     suspend fun upNext(profileId: Int, itemId: Int): Pair<Int, List<Card>> {
         val o = call("GET", "/upnext?profile_id=$profileId&item_id=$itemId") as JSONObject
         return o.optInt("autoplay_n", 2) to o.getJSONArray("cards").objects().map(::card)

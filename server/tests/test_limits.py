@@ -196,3 +196,16 @@ def test_unlock_lifts_closed_hours_for_the_rest_of_the_day(env):
         assert clock.context(c, pid, now).open is False
         clock.add_override(c, pid, "unlock", now=now)
         assert clock.context(c, pid, now + 80 * 60).open is True  # past the old one-hour unlock
+
+
+def test_the_stamp_changes_when_a_parent_starts_a_limit(env):
+    """2026-11-24: the TV reloads as soon as a limit starts; it watches this code every few seconds."""
+    pid, tv, ids = _setup(env)
+    st = lambda: tv.get(f"{V}/stamp", params={"profile_id": pid}).json()["stamp"]
+    first = st()
+    assert st() == first  # nothing changed: the same code
+    env.client.post(f"/api/admin/kids/{pid}/limit", json={"minutes": 15})
+    after_limit = st()
+    assert after_limit != first
+    env.client.post(f"/api/admin/kids/{pid}/extra", json={"minutes": 10})
+    assert st() != after_limit

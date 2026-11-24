@@ -173,7 +173,8 @@ fun ChannelsScreen(nav: Nav, profile: Profile) {
     val s = LocalScale.current
     var tiles by remember { mutableStateOf<List<ChannelTile>?>(null) }
     val first = remember { FocusRequester() }
-    LaunchedEffect(profile.id) { tiles = try { nav.api.channels(profile.id) } catch (e: Exception) { emptyList() } }
+    val stamp = rememberLimitStamp(nav, profile.id)
+    LaunchedEffect(profile.id, stamp) { tiles = try { nav.api.channels(profile.id) } catch (e: Exception) { emptyList() } }
     // Five circles fit beside the menu, so the menu stays.
     MenuFrame(nav, profile, Menu.Channels, menuWanted = true, time = null) {
         val t = tiles ?: return@MenuFrame
@@ -214,7 +215,8 @@ fun ShelfScreen(nav: Nav, profile: Profile, kind: String) {
     var page by remember { mutableStateOf<Container?>(null) }
     var col by remember { mutableIntStateOf(0) }
     val first = remember { FocusRequester() }
-    LaunchedEffect(kind) { page = try { nav.api.shelf(kind, profile.id) } catch (e: Exception) { Container(0, menu.label, emptyList()) } }
+    val stamp = rememberLimitStamp(nav, profile.id)
+    LaunchedEffect(kind, stamp) { page = try { nav.api.shelf(kind, profile.id) } catch (e: Exception) { Container(0, menu.label, emptyList()) } }
     MenuFrame(nav, profile, menu, menuWanted = col == 0, time = null) {
         val p = page ?: return@MenuFrame
         BasicText(menu.label, Modifier.offset(x = s(84), y = s(64)), style = text(56, playful = true))
@@ -247,8 +249,9 @@ fun SearchScreen(nav: Nav, profile: Profile) {
     val firstResult = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = LocalFocusManager.current
-    // Ask once typing (or speaking) pauses, not on every letter.
-    LaunchedEffect(query) {
+    // Ask once typing (or speaking) pauses, not on every letter; again when a limit changes what fits.
+    val stamp = rememberLimitStamp(nav, profile.id)
+    LaunchedEffect(query, stamp) {
         if (query.isBlank()) { results = null; return@LaunchedEffect }
         delay(350)
         results = try { nav.api.search(query, profile.id) } catch (e: Exception) { emptyList() }

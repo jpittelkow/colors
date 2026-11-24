@@ -11,7 +11,7 @@ from app.api import tv
 APP_DIR = Path(tv.__file__).resolve().parent.parent
 
 # TV routes that return no items and no stream, so they need no pipeline call.
-NO_ITEMS = {"pair_start", "pair_status", "profiles"}
+NO_ITEMS = {"pair_start", "pair_status", "profiles", "stamp"}  # stamp: a hash of limits and overrides, no items
 
 
 def _route_functions(path: Path) -> dict[str, str]:

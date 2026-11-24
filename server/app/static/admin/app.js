@@ -295,7 +295,7 @@ function addButtons(v) {
 
 function searchForm(value = "") {
   const q = h("input", { id: "q", class: "kt-input kt-input--search", type: "search", value, enterkeyhint: "search",
-    placeholder: "Search library, YouTube, Plex" });
+    placeholder: "Search or paste a YouTube link" });
   return h("form", { class: "search-form", onsubmit: (e) => { e.preventDefault(); const t = q.value.trim(); if (t) go("find/" + encodeURIComponent(t)); } },
     h("label", { for: "q", class: "sr" }, "Search your library, YouTube and Plex, or paste a YouTube link"), q);
 }
@@ -368,7 +368,7 @@ async function viewLibrary() {
     }
   };
 
-  const addBtn = h("a", { class: "kt-btn kt-btn--primary", href: "#add" }, icon("plus"), "Add");
+  const addBtn = moreWays();
   if (!chans.length) {
     return screen(wordmark(), { action: addBtn, search: searchForm() },
       h("div", { class: "empty-state" },
@@ -518,21 +518,29 @@ function drawListing(el, l) {
 
 // ---- Add: every way to bring something in, in one list --------------------------------------------------------------
 
-async function viewAddMenu() {
-  const [plex, ai, open] = await Promise.all([api("/plex").catch(() => ({ connected: false })), api("/ai").catch(() => ({})), api("/imports/open").catch(() => ({}))]);
-  const way = (title, sub, value, hash) => h("a", { class: "kt-list__row", href: "#" + hash },
-    h("span", { class: "kt-list__text" }, title, h("span", { class: "kt-muted" }, sub)), h("span", { class: "kt-list__value" }, value || "›"));
-  screen("Add", { back: "library", narrow: true },
-    h("h2", { class: "kt-label" }, "Search or paste a link"),
-    searchForm(),
-    h("p", { class: "kt-muted", style: "margin:0" }, "Type a name to search your library, YouTube and Plex together. Or paste a YouTube link to a video, a playlist or a channel."),
-    h("h2", { class: "kt-label" }, "Other ways"),
-    h("div", { class: "kt-list" },
-      way("Browse Plex", plex.connected ? "Allow shows and movies you already own" : "Connect Plex first, in Settings", plex.connected ? `${(plex.allowed || []).length} allowed` : "Not connected", plex.connected ? "plex" : "plex-connect"),
-      way("Import from YouTube Kids", "Paste links, a Google Takeout file or a playlist", open.state === "review" ? "Ready to review" : open.id ? "In progress" : null, open.state === "review" ? `import/${open.id}` : "import"),
-      way("Ideas from the AI", ai.enabled ? "Channels and videos it thinks the boys would like" : "Off. Turn it on in Settings › AI", ai.enabled ? (ai.new_suggestions ? `${ai.new_suggestions} new` : "None yet") : "Off", ai.enabled ? "ideas" : "ai")));
-  document.getElementById("q")?.focus();
+// "More ways" (2026-11-24): the Library's search bar is the one way to search and add; the other ways to bring
+// things in sit in this small menu instead of an Add page that repeated the search bar.
+function moreWays() {
+  const menu = h("div", { class: "more-ways__menu", role: "menu" });
+  const d = h("details", { class: "more-ways" }, h("summary", { class: "kt-btn kt-btn--primary" }, icon("plus"), "More ways"), menu);
+  const item = (title, sub, hash) => h("a", { class: "more-ways__item", role: "menuitem", href: "#" + hash, onclick: () => d.removeAttribute("open") },
+    h("span", {}, title), sub ? h("span", { class: "kt-muted" }, sub) : null);
+  const draw = (plex = {}, ai = {}, open = {}) => fill(menu,
+    item("Import from YouTube Kids", open.state === "review" ? "Ready to review" : open.id ? "In progress" : "Links, a Takeout file or a playlist",
+      open.state === "review" ? `import/${open.id}` : "import"),
+    item("Browse Plex", plex.connected ? `${(plex.allowed || []).length} allowed` : "Connect Plex first, in Settings", plex.connected ? "plex" : "plex-connect"),
+    item("Ideas from the AI", ai.enabled ? (ai.new_suggestions ? `${ai.new_suggestions} new` : "None yet") : "Off. Turn it on in Settings › AI", ai.enabled ? "ideas" : "ai"));
+  draw();
+  d.addEventListener("toggle", () => {
+    if (d.open) Promise.all([api("/plex").catch(() => ({})), api("/ai").catch(() => ({})), api("/imports/open").catch(() => ({}))])
+      .then(([plex, ai, open]) => draw(plex, ai, open));
+  });
+  return d;
 }
+// A click anywhere else closes an open "More ways" menu.
+document.addEventListener("click", (e) => {
+  for (const d of document.querySelectorAll("details.more-ways[open]")) if (!d.contains(e.target)) d.removeAttribute("open");
+});
 
 async function viewSubscribe(url, subId) {
   let sub = null, info = null;
@@ -1625,7 +1633,7 @@ const plexPoster = (rk, title, cls = "") => {
 async function viewPlex() {
   const st = await api("/plex");
   if (!st.connected) {
-    return screen("Plex", { back: "add" }, h("div", { class: "empty-state" }, h("h2", { class: "h-display" }, "Plex isn't connected"),
+    return screen("Plex", { back: "library" }, h("div", { class: "empty-state" }, h("h2", { class: "h-display" }, "Plex isn't connected"),
       h("p", { style: "margin:0" }, st.error || "Connect it once, then allow the shows and movies the boys may watch."),
       h("a", { class: "kt-btn kt-btn--primary", href: "#plex-connect" }, "Connect Plex")));
   }
@@ -1663,7 +1671,7 @@ async function viewPlex() {
   search.addEventListener("input", () => { plexState.filter = search.value.trim(); drawResults(); });
 
   const sections = await api("/plex/sections").catch(() => []);
-  screen("Browse Plex", { back: "add" },
+  screen("Browse Plex", { back: "library" },
     h("p", { class: "kt-muted", style: "margin:0" }, "Nothing from Plex shows on the TVs until you allow it. Videos play straight from Plex; nothing is copied."),
     (st.unplayable || []).length ? h("div", { class: "kt-banner kt-banner--warn" }, h("span", {}, h("strong", {}, `${st.unplayable.length} allowed titles won't play on the TVs`), " as they are (for example 4K or DTS sound), so they are hidden. An optimized version in Plex fixes that.")) : null,
     h("form", { onsubmit: (e) => {
@@ -1940,7 +1948,7 @@ async function viewIdeas() {
     return h("div", { class: "kt-stack", style: "gap:6px" }, videoRow(v, { right: [addButtons(v), h("button", { class: "kt-btn kt-btn--sm", type: "button", onclick: () => dismiss(sg) }, "No thanks")] }),
       sg.reason ? h("div", { class: "kt-muted suggest-why" }, sg.reason) : null);
   });
-  screen("Ideas", { back: "add" },
+  screen("Ideas", { back: "library" },
     list.length ? [h("p", { class: "kt-muted", style: "margin:0" }, "Suggested by the AI and checked on YouTube. Nothing is added until you add it."), forRow(), cards]
       : h("div", { class: "empty-state" }, h("h2", { class: "h-display" }, "No ideas right now"),
           h("p", { style: "margin:0" }, "With AI on, new ideas arrive once a week. You can also ask for some now."),
@@ -1978,7 +1986,7 @@ async function viewImport() {
     : [h("div", { class: "kt-field" }, h("label", { for: "impplist" }, "Playlist link"), plist),
       h("p", { class: "kt-muted", style: "margin:0" }, "Build one playlist of everything approved on your phone, then paste its link. Every video in it comes in.")]);
   drawSeg(); drawBox();
-  screen("Import", { back: "add" },
+  screen("Import", { back: "library" },
     h("p", { style: "margin:0" }, "Bring in what the boys already have approved. You check everything before it's added."),
     seg, box,
     h("button", { class: "kt-btn kt-btn--primary kt-btn--wide", type: "button", onclick: (e) => run(async () => {
@@ -2043,7 +2051,7 @@ async function viewImportRun(id) {
   const children = profiles.filter((p) => p.kind === "child").map((p) => p.id);
   let opts = { mode: "new", last_n: 10, trusted: false };
   const body = h("div", { class: "kt-stack", style: "gap:16px" }, loadingLine("Loading the import…"), skelRows(3));
-  screen("Import", { back: "add", action: h("button", { class: "kt-btn kt-btn--quiet", type: "button", onclick: (e) => {
+  screen("Import", { back: "library", action: h("button", { class: "kt-btn kt-btn--quiet", type: "button", onclick: (e) => {
     const b = e.currentTarget;
     if (!b.dataset.sure) { b.dataset.sure = "1"; b.textContent = "Tap again to cancel"; return; }
     run(async () => { await api(`/import/${id}`, { method: "DELETE" }); go("import"); });
@@ -2260,7 +2268,7 @@ async function route() {
   for (const el of nav.querySelectorAll("a")) el.toggleAttribute("aria-current", el.dataset.tab === (TAB_OF[name] || "settings"));
   for (const el of nav.querySelectorAll("a[aria-current]")) el.setAttribute("aria-current", "page");
   const views = {
-    library: viewLibrary, find: () => viewFind(decodeURIComponent(a || "")), add: viewAddMenu,
+    library: viewLibrary, find: () => viewFind(decodeURIComponent(a || "")), add: () => { history.replaceState(null, "", "#library"); return viewLibrary(); },
     subscribe: () => viewSubscribe(decodeURIComponent(a || "")), import: () => (a ? viewImportRun(a) : viewImport()),
     plex: viewPlex, "plex-connect": viewPlexConnect, ideas: viewIdeas,
     channel: () => viewChannel(a, b || "library"), "channel-settings": () => viewSubscribe("", a), video: () => viewVideo(a),

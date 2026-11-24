@@ -1513,7 +1513,14 @@ function drawActivity() {
   const dl = a.downloads, known = dl.filter((d) => d.percent != null);
   const avg = known.length ? Math.round(known.reduce((x, d) => x + d.percent, 0) / known.length) : null;
   let state = "idle", label = "All quiet", suffix = "";
-  if (dl.length || (a.queued && !a.downloads_paused && !a.storage_full)) {
+  // YouTube asked for a break ("confirm you're not a bot"): downloads wait until it is over.
+  const brk = a.youtube_break && a.youtube_break.until * 1000 > Date.now() ? a.youtube_break : null;
+  const brkAt = brk ? new Date(brk.until * 1000).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "";
+  if (!dl.length && brk) {
+    state = "warn";
+    label = "YouTube asked for a break";
+    suffix = `downloads resume at ${brkAt}`;
+  } else if (dl.length || (a.queued && !a.downloads_paused && !a.storage_full)) {
     state = "run";  // between two downloads there is a short gap with nothing active: still downloading
     label = dl.length > 1 ? `${dl.length} downloading` : "Downloading";
     suffix = [avg != null ? `${avg}%` : dl.length ? dl[0].phase : null, a.queued ? `${a.queued} waiting` : null, a.running.length ? `+${a.running.length} job${a.running.length > 1 ? "s" : ""}` : null].filter(Boolean).join(" · ");
@@ -1555,7 +1562,15 @@ function drawActivity() {
     h("span", { class: "kt-spinner" }), h("span", { class: "scrob-name" }, r.label, r.note ? h("span", { class: "kt-muted" }, ` ${r.note}`) : null),
     h("span", { class: "kt-muted" }, took(a.now - r.started_at))))] : []);
   const ims = a.imports || [];
-  fillIfChanged(scrob.errors, `${a.failed}|${a.errors.map((e) => e.id).join(",")}|${ims.map((i) => `${i.id}${i.state}${i.stopped}`).join(",")}`, () => (a.failed || a.errors.length || ims.length ? [h("div", { class: "scrob-title" }, "Needs a look"),
+  fillIfChanged(scrob.errors, `${a.failed}|${a.errors.map((e) => e.id).join(",")}|${ims.map((i) => `${i.id}${i.state}${i.stopped}`).join(",")}|${brkAt}`, () => (a.failed || a.errors.length || ims.length || brk ? [h("div", { class: "scrob-title" }, "Needs a look"),
+    brk ? h("div", { class: "scrob-row" }, h("span", { class: "scrob-dot scrob-dot--warn" }),
+      h("span", { class: "scrob-name" }, `YouTube asked for a break. Downloads wait until ${brkAt}${a.queued ? ` (${a.queued} waiting)` : ""}.`),
+      h("button", { class: "kt-btn kt-btn--sm kt-btn--quiet", type: "button", onclick: (e) => run(async () => {
+        busy(e.currentTarget);
+        await api("/youtube-break/end", { method: "POST" });
+        toast("Downloads carry on now. If YouTube says no again, they take another break.");
+        kickActivity();
+      }) }, "Resume now")) : null,
     ims.map((i) => h("a", { class: "scrob-row", href: `#import/${i.id}` }, h("span", { class: "scrob-dot scrob-dot--news" }),
       h("span", { class: "scrob-name" }, i.state === "done" ? `Import finished${i.added ? `: ${i.added} added` : ""}` : i.stopped ? "Import stopped: the rest wait for you" : "Import ready to review"),
       h("span", {}, "Open →"))),

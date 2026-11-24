@@ -52,6 +52,7 @@ Then open `http://<host>:8460/admin/`. Unraid template and update script: [docs/
 | `KIDTUBE_ADMIN_PASSWORD` | Sets the parents' password on first start only |
 | `KIDTUBE_PLEX_URL`, `KIDTUBE_PLEX_TOKEN` | Optional; the page's Plex screen can set them instead |
 | `KIDTUBE_FFMPEG_DIR` | Folder holding ffmpeg, only when it is not on the PATH |
+| `KIDTUBE_POT_URL` | A [bgutil PO token helper](https://github.com/Brainicism/bgutil-ytdlp-pot-provider), e.g. `http://<host>:4416`. Recommended: without it YouTube soon asks a busy server to "confirm you're not a bot" |
 | `TZ` | Time zone for the day rollover and closed hours |
 
 ### Develop

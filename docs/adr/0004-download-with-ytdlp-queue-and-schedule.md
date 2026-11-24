@@ -57,3 +57,6 @@ The 6-hourly retry put 287 failed downloads back at once; the queue ran them bac
 - During a break nothing downloads and the 6-hourly retry waits. The activity data says until when; a parent can end
   the break early (`POST /api/admin/youtube-break/end`).
 - 15 seconds between downloads, so a long queue is not one long burst.
+- The same day: a **PO token helper** (bgutil, its own container) and its yt-dlp plugin, set by `KIDTUBE_POT_URL`,
+  so YouTube gets the proof-of-origin tokens it now expects. The break stays as the fallback. A cookies file from a
+  spare Google account was the alternative: more reliable, but it puts an account at risk.

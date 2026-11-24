@@ -29,6 +29,19 @@ It refuses to run with uncommitted changes, builds the image on the host from `g
 `kidtube:latest` and `kidtube:<commit>`, and recreates the container from the template with Unraid's
 `update_container`.
 
+## The PO token helper
+
+YouTube flags a server that downloads a lot ("Sign in to confirm you're not a bot"). A PO token helper avoids most of
+that. Run it next to colors and point `KIDTUBE_POT_URL` at it:
+
+```bash
+docker run -d --name bgutil-pot-provider --init --restart unless-stopped -p 4416:4416   brainicism/bgutil-ytdlp-pot-provider:2.0.2
+```
+
+Keep its tag equal to the `bgutil-ytdlp-pot-provider` version in `server/requirements.txt` (the yt-dlp plugin that
+talks to it). Check it with `curl http://<host>:4416/ping`. When YouTube blocks anyway, downloads take a break by
+themselves (ADR 0004) and the activity pill says until when.
+
 ## Your own characters
 
 Profile characters beyond the built-in set go in `/data/characters/<id>.svg` (ADR 0036). They show up in the picker

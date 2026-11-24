@@ -98,10 +98,12 @@ def _avatar(res: dict) -> str:
 
 
 class YtDlp:
-    def __init__(self, library_dir: Path, cookies_file: Path | None = None, ffmpeg_dir: str | None = None):
+    def __init__(self, library_dir: Path, cookies_file: Path | None = None, ffmpeg_dir: str | None = None,
+                 pot_url: str | None = None):
         self.library_dir = library_dir
         self.cookies_file = cookies_file
         self.ffmpeg_dir = ffmpeg_dir  # only needed when ffmpeg is not on the PATH
+        self.pot_url = pot_url  # the bgutil PO token helper, e.g. http://192.168.1.10:4416
 
     def _opts(self, **extra) -> dict:
         # YouTube needs a JavaScript runtime to solve its player challenges; without one many videos
@@ -111,6 +113,10 @@ class YtDlp:
             opts["cookiefile"] = str(self.cookies_file)
         if self.ffmpeg_dir:
             opts["ffmpeg_location"] = self.ffmpeg_dir
+        if self.pot_url:
+            # The bgutil plugin (installed with the server) asks this helper for the proof-of-origin tokens YouTube
+            # now wants. Without them a busy address gets "Sign in to confirm you're not a bot".
+            opts["extractor_args"] = {"youtubepot-bgutilhttp": {"base_url": [self.pot_url]}}
         opts.update(extra)
         return opts
 

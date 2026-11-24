@@ -59,7 +59,7 @@ def create_app(cfg: Config | None = None, downloader=None) -> FastAPI:
     app.state.cfg = cfg
     app.state.db = db
     app.state.signer = Signer(db)
-    app.state.downloader = downloader or YtDlp(cfg.library_dir, cfg.data_dir / "cookies.txt", cfg.ffmpeg_dir)
+    app.state.downloader = downloader or YtDlp(cfg.library_dir, cfg.data_dir / "cookies.txt", cfg.ffmpeg_dir, cfg.pot_url)
     app.state.pics = ChannelPics(db, app.state.downloader, cfg.data_dir)
     app.state.registry = Registry(db, app.state, background.all_jobs())
 

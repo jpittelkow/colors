@@ -44,15 +44,19 @@ def build(db: Database, profile_id: int, label: str) -> int:
     user = (f"{label}.\nRecently started: " + ("; ".join(r["title"] for r in recent) or "nothing yet")
             + "\n\nVideos (id | title | channel | length):\n" + "\n".join(lines))
     allowed = {r["id"] for r in items}
-    try:
-        # 400 was enough for 20 ids until a big import made the list long; the reply then stopped mid-list.
-        answer = openrouter.chat(db, "picks", SYSTEM, user, max_tokens=1200)
-        got = answer.get("order") or []
-    except openrouter.AIError as exc:
-        # A reply cut off mid-list still names ids in order: keep the ones that were offered (2026-11-24).
-        got = [int(x) for x in re.findall(r"\d+", exc.text.split("order", 1)[-1])] if exc.text else []
-        if not any(g in allowed for g in got):
-            raise
+    for attempt in (1, 2):  # now and then a reply is unusable; the next one usually isn't (2026-11-24)
+        try:
+            # 400 was enough for 20 ids until a big import made the list long; the reply then stopped mid-list.
+            answer = openrouter.chat(db, "picks", SYSTEM, user, max_tokens=1200)
+            got = answer.get("order") or []
+        except openrouter.AIError as exc:
+            # A reply cut off mid-list still names ids in order: keep the ones that were offered.
+            got = [int(x) for x in re.findall(r"\d+", exc.text.split("order", 1)[-1])] if exc.text else []
+            if not any(g in allowed for g in got):
+                if attempt == 2 or not exc.text:  # no reply at all (key, cap, network): asking again won't help
+                    raise
+                continue
+        break
     order = []
     for x in got:
         try:

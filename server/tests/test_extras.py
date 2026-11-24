@@ -377,7 +377,8 @@ def test_a_reply_cut_off_mid_list_still_gives_a_row(env, monkeypatch):
     assert env.app.state.registry.start_job("ai-picks", wait=True)
     with env.db.conn() as c:  # the ids it named before it stopped, in its order; 99999 was never offered
         assert json.loads(c.execute("SELECT item_ids FROM picks WHERE profile_id = ?", (sam,)).fetchone()[0]) == [ids[2], ids[0], ids[1]]
-    ai_on(env, monkeypatch, "Sorry, I can't help with that.")  # nothing usable: still an error, as before
+    fake = ai_on(env, monkeypatch, "Sorry, I can't help with that.")  # nothing usable twice: still an error
     assert env.app.state.registry.start_job("ai-picks", wait=True)
     with env.db.conn() as c:
         assert c.execute("SELECT state FROM job_runs WHERE job = 'ai-picks' ORDER BY id DESC").fetchone()[0] == "failed"
+    assert len(fake.sent) == 2  # asked once more before giving up

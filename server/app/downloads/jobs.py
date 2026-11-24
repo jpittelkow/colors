@@ -130,10 +130,12 @@ AUTO_ATTEMPTS = 6  # the 6-hourly retry job stops trying after this many tries i
 
 
 def retry_failed(db: Database, *, max_attempts: int | None = None) -> int:
-    """Queue every failed download again. Ones a parent stopped stay stopped."""
-    sql = "SELECT id FROM jobs WHERE state = 'failed' AND stopped = 0"
+    """Queue every failed download again. Ones a parent stopped stay stopped, and so do videos a parent turned
+    down ("Not for them")."""
+    sql = ("SELECT j.id FROM jobs j JOIN items i ON i.id = j.item_id "
+           "WHERE j.state = 'failed' AND j.stopped = 0 AND i.approval <> 'hidden'")
     if max_attempts is not None:
-        sql += f" AND attempts < {int(max_attempts)}"
+        sql += f" AND j.attempts < {int(max_attempts)}"
     with db.conn() as c:
         ids = [r[0] for r in c.execute(sql)]
     for i in ids:
@@ -157,6 +159,24 @@ def stop(db: Database, job_id: int) -> str:
         progress.request_cancel(job_id)
         return "stopping"
     return "finished"
+
+
+def stop_for_items(db: Database, item_ids: list[int]) -> int:
+    """Nothing more downloads for these videos: waiting and running downloads stop, and failed ones are marked
+    stopped so the retry job leaves them. For an unsubscribe and for "Not for them". Returns how many it stopped."""
+    if not item_ids:
+        return 0
+    marks = ",".join("?" for _ in item_ids)
+    with db.conn() as c:
+        rows = c.execute(f"SELECT id, state FROM jobs WHERE item_id IN ({marks}) AND (state IN ('queued', 'running') "
+                         "OR (state = 'failed' AND stopped = 0))", item_ids).fetchall()
+        failed = [r["id"] for r in rows if r["state"] == "failed"]
+        if failed:
+            c.execute(f"UPDATE jobs SET stopped = 1, retry_at = NULL WHERE id IN ({','.join('?' for _ in failed)})", failed)
+    for r in rows:
+        if r["state"] != "failed":
+            stop(db, r["id"])
+    return len(rows)
 
 
 def _clean_partial(library_dir: Path, external_id: str) -> None:

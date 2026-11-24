@@ -104,6 +104,11 @@ def _queued_today(c, container_id: int) -> int:
     ).fetchone()[0]
 
 
+# Remember a video as seen, unless the parent unsubscribed meanwhile (the row would point at nothing).
+SEEN = ("INSERT OR IGNORE INTO sub_seen (sub_id, external_id) SELECT ?, ? "
+        "WHERE EXISTS (SELECT 1 FROM subscriptions WHERE id = ?)")
+
+
 def check(db: Database, downloader, sub_id: int, *, listing=None) -> dict:
     """Look for videos the subscription has not seen and queue the ones that pass its rules."""
     with db.conn() as c:
@@ -138,18 +143,37 @@ def check(db: Database, downloader, sub_id: int, *, listing=None) -> dict:
         if why:
             skipped += 1
             with db.conn() as c:
-                c.execute("INSERT OR IGNORE INTO sub_seen (sub_id, external_id) VALUES (?, ?)", (sub_id, v.external_id))
+                c.execute(SEEN, (sub_id, v.external_id, sub_id))
             continue
         if queued >= room:
             break  # paced: the rest stay unseen and come in on a later check
+        with db.conn() as c:  # unsubscribed while this check ran: add nothing more
+            if not c.execute("SELECT 1 FROM subscriptions WHERE id = ?", (sub_id,)).fetchone():
+                break
         v.channel_id = v.channel_id or listing.channel_id
         jobs.add_video(db, v, approve=bool(sub["trusted"]), profile_ids=[], container_id=sub["container_id"])
         with db.conn() as c:
-            c.execute("INSERT OR IGNORE INTO sub_seen (sub_id, external_id) VALUES (?, ?)", (sub_id, v.external_id))
+            c.execute(SEEN, (sub_id, v.external_id, sub_id))
         queued += 1
     with db.conn() as c:
         c.execute("UPDATE subscriptions SET last_checked = ?, last_error = '' WHERE id = ?", (time.time(), sub_id))
     return {"queued": queued, "skipped": skipped}
+
+
+def unsubscribe(db: Database, sub_id: int) -> int:
+    """Stop following a channel, and stop downloading what the subscription queued: nothing more comes in from it.
+    Videos already downloaded stay. Returns how many downloads it stopped (each shows as Stopped in Downloads and
+    can be tried again from there by hand)."""
+    with db.conn() as c:
+        sub = c.execute("SELECT container_id FROM subscriptions WHERE id = ?", (sub_id,)).fetchone()
+        if not sub:
+            return 0
+        # The subscription's own videos: what it saw and added (a video a parent added by hand is not in sub_seen).
+        ids = [r[0] for r in c.execute(
+            "SELECT i.id FROM items i JOIN sub_seen s ON s.external_id = i.external_id AND s.sub_id = ? "
+            "WHERE i.container_id = ? AND i.source = 'local'", (sub_id, sub["container_id"]))]
+        c.execute("DELETE FROM subscriptions WHERE id = ?", (sub_id,))
+    return jobs.stop_for_items(db, ids)
 
 
 def due(db: Database, now: float | None = None) -> list[int]:

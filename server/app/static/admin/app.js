@@ -614,8 +614,8 @@ async function viewSubscribe(url, subId) {
           row(h("label", { for: "daily_cap" }, "Most downloads a day"), f.daily_cap, "Keeps big first imports gentle")))),
     subId && sub ? save : null,
     subId && sub ? h("button", { class: "kt-btn kt-btn--danger", type: "button", style: "align-self:flex-start", onclick: () => run(async () => {
-      await api(`/subscriptions/${sub.id}`, { method: "DELETE" });
-      toast("Unsubscribed. Downloaded videos stay.");
+      const r = await api(`/subscriptions/${sub.id}`, { method: "DELETE" });
+      toast(r.stopped ? `Unsubscribed. ${r.stopped} waiting download${r.stopped === 1 ? "" : "s"} stopped; downloaded videos stay.` : "Unsubscribed. Downloaded videos stay.");
       go(`channel/${subId}`);
     }) }, "Unsubscribe") : null);
 }
@@ -711,11 +711,18 @@ async function viewApprove() {
       const local = first.container_source === "local";
       return h("section", { class: "approve-group" },
         h("div", { class: "approve-group__head" },
-          h("a", { class: "kt-channel linkish", href: `#channel/${first.container_id}`, style: "flex:1; min-width:0" },
+          h("a", { class: "kt-channel linkish", href: `#channel/${first.container_id}` },
             local ? chanAvatar(first.container_external_id, first.container_thumb, first.container_title) : avatar(first.container_thumb, first.container_title, "kt-avatar--plain"),
             h("div", { class: "kt-video__body" }, h("div", { class: "kt-video__title" }, first.container_title),
               h("div", { class: "kt-muted" }, `${its.length} waiting`))),
-          clean.length > 1 ? h("button", { class: "kt-btn kt-btn--sm", type: "button", onclick: () => decide(clean, "approved", `Approved ${clean.length} from ${first.container_title}`) }, `Approve all ${clean.length}`) : null),
+          its.length > 1 ? h("div", { class: "kt-row", style: "gap:8px; flex-wrap:wrap; justify-content:flex-end" },
+            clean.length > 1 ? h("button", { class: "kt-btn kt-btn--sm", type: "button", onclick: () => decide(clean, "approved", `Approved ${clean.length} from ${first.container_title}`) }, `Approve all ${clean.length}`) : null,
+            // The other answer for the whole channel. Two taps: it also stops their downloads.
+            h("button", { class: "kt-btn kt-btn--sm kt-btn--quiet", type: "button", onclick: (e) => {
+              const b = e.currentTarget;
+              if (!b.dataset.sure) { b.dataset.sure = "1"; b.textContent = `Tap again: none of these ${its.length}`; return; }
+              decide(its, "hidden", `${its.length} from ${first.container_title}: not for them`);
+            } }, `Not for them, all ${its.length}`)) : null),
         its.map(rowOf),
         local && !first.container_trusted ? h("button", { class: "kt-btn kt-btn--quiet approve-group__always", type: "button", onclick: (e) => {
           const b = e.currentTarget;

@@ -161,10 +161,8 @@ def subscription_check(sid: int, request: Request) -> dict:
 
 @router.delete("/subscriptions/{sid}")
 def subscription_delete(sid: int, request: Request) -> dict:
-    """Stop following the channel. Videos already downloaded stay."""
-    with _db(request).conn() as c:
-        c.execute("DELETE FROM subscriptions WHERE id = ?", (sid,))
-    return {"ok": True}
+    """Stop following the channel, and stop its waiting downloads. Videos already downloaded stay."""
+    return {"ok": True, "stopped": subscriptions.unsubscribe(_db(request), sid)}
 
 
 # ---- one video ------------------------------------------------------------------------------------------------------

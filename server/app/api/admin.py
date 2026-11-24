@@ -333,6 +333,8 @@ def item_patch(item_id: int, body: ItemPatch, request: Request) -> dict:
                 "INSERT INTO events (ts, item_id, type, data) VALUES (?, ?, 'approval', ?)",
                 (time.time(), item_id, body.approval),
             )
+    if body.approval == "hidden":  # "Not for them": its download stops too
+        jobs.stop_for_items(_db(request), [item_id])
     return {"ok": True}
 
 
@@ -350,7 +352,8 @@ def items_decide(body: DecideIn, request: Request) -> dict:
             c.execute("UPDATE items SET approval = ? WHERE id = ?", (body.approval, item_id))
             c.execute("INSERT INTO events (ts, item_id, type, data) VALUES (?, ?, 'approval', ?)",
                       (now, item_id, body.approval))
-    return {"decided": len(body.ids)}
+    stopped = jobs.stop_for_items(_db(request), body.ids) if body.approval == "hidden" else 0  # "Not for them"
+    return {"decided": len(body.ids), "stopped": stopped}
 
 
 @guarded.get("/items/{item_id}/thumb")

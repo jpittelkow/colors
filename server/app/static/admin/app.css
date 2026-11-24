@@ -228,7 +228,8 @@ textarea.kt-input { min-height: 140px; padding: var(--space-3); resize: vertical
 .approve__detail { display: none; }
 .approve__list { display: flex; flex-direction: column; gap: var(--space-4); }
 .approve-group { background: var(--surface-200); border-radius: var(--radius-lg); padding: var(--space-3) var(--space-4); display: flex; flex-direction: column; }
-.approve-group__head { display: flex; gap: var(--space-3); align-items: center; padding-bottom: var(--space-2); }
+.approve-group__head { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; padding-bottom: var(--space-2); }
+.approve-group__head > .kt-channel { flex: 1 1 200px; min-width: 0; }  /* the channel's name first; the buttons wrap below on a phone */
 .approve-group__always { align-self: flex-start; }
 .approve-row { display: flex; gap: var(--space-3); align-items: flex-start; padding: var(--space-3) 0; border-top: 1px solid var(--line); }
 .approve-row > .kt-thumb { cursor: pointer; }

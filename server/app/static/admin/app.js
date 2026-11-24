@@ -882,7 +882,7 @@ async function viewVideo(id) {
 function kidCard({ profile: p, time: t, reason, playing }, redraw, { link = true } = {}) {
   const act = (action, minutes) => run(async () => {
     await api(`/kids/${p.id}/${action}`, { method: "POST", body: { minutes: minutes || 0 } });
-    toast({ extra: `+${minutes} min for ${p.name}`, limit: `${minutes} min limit started for ${p.name}`, lastone: "Last one, then it stops", lock: `Stopped for ${p.name}`, unlock: "Unlocked for an hour", "clear-limit": "Limit cleared" }[action] || "Done");
+    toast({ extra: `+${minutes} min for ${p.name}`, limit: `${minutes} min limit started for ${p.name}`, lastone: "Last one, then it stops", lock: `Stopped for ${p.name}`, unlock: `Unlocked for ${p.name} until tomorrow`, "clear-limit": "Limit cleared" }[action] || "Done");
     redraw();
   });
   const leftLine = t.limited
@@ -890,7 +890,7 @@ function kidCard({ profile: p, time: t, reason, playing }, redraw, { link = true
         h("div", { class: "kt-row", style: "justify-content:space-between" }, h("strong", {}, t.open ? `${minutesText(t.left_s)} left` : (reason || "Closed")), h("span", { class: "kt-muted" }, t.open ? reason : `${minutesText(t.used_today_s)} watched today`)),
         t.open ? h("div", { class: "kt-bar kt-bar--time" + (t.left_s < 300 ? " kt-bar--low" : ""), role: "progressbar", "aria-label": "Time left", "aria-valuenow": Math.round(t.left_s / 60), "aria-valuemin": 0 },
           h("i", { style: `width:${Math.min(100, t.daily_s ? (t.left_s / t.daily_s) * 100 : 50)}%` })) : null)
-    : h("div", { class: "kt-muted" }, `${minutesText(t.used_today_s)} watched today · no limit running`);
+    : h("div", { class: "kt-muted" }, `${minutesText(t.used_today_s)} watched today · ${t.unlocked ? "unlocked until tomorrow" : "no limit running"}`);
   const head = [profileAvatar(p, "kt-avatar--lg"),
     h("div", { class: "kt-video__body" }, h("div", { class: "kt-video__title", style: "font-size:18px" }, p.name), h("div", { class: "kt-muted" }, playing ? `Watching on ${playing.tv}` : "Not watching")),
     link ? h("span", { class: "kt-list__value", "aria-hidden": "true" }, "›") : null];
@@ -904,7 +904,7 @@ function kidCard({ profile: p, time: t, reason, playing }, redraw, { link = true
       t.open && !t.lastone ? h("button", { class: "kt-btn kt-btn--primary", type: "button", onclick: () => act("lastone") }, "Last one") : null,
       t.lastone ? h("span", { class: "kt-tag kt-tag--warn" }, "Last one") : null,
       h("button", { class: "kt-btn", type: "button", onclick: () => act("extra", 10) }, "+10 min"),
-      t.open ? h("button", { class: "kt-btn", type: "button", onclick: () => act("lock") }, "End now") : h("button", { class: "kt-btn", type: "button", onclick: () => act("unlock", 60) }, "Unlock for an hour")),
+      t.open ? h("button", { class: "kt-btn", type: "button", onclick: () => act("lock") }, "End now") : h("button", { class: "kt-btn", type: "button", onclick: () => act("unlock") }, "Unlock")),
     h("div", { class: "kt-row" }, h("span", { class: "kt-muted" }, "Start a limit:"),
       [5, 10, 15, 30, 45, 60].map((m) => h("button", { class: "kt-chip", type: "button", onclick: () => act("limit", m) }, `${m} min`))),
     // His own page, said plainly: the small "›" on the name was easy to miss (the owner, 2026-11-23).

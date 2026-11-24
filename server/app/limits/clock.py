@@ -66,6 +66,7 @@ class Context:
     # started. Kept in the override's note as "item:<id>".
     lastone_item: int | None = None
     opens_at: str = ""               # closed hours: the time they end, for the TV's "Good night" screen
+    unlocked: bool = False           # a parent pressed Unlock today: no limits until tomorrow (or End now)
     hard_stop: bool = False          # a parent ended it: stop even mid-video
     limits: dict = field(default_factory=dict)
 
@@ -80,6 +81,7 @@ class Context:
             "show_timer": self.show_timer,
             "lastone": self.lastone,
             "opens_at": self.opens_at if self.reason == "Closed now" else "",
+            "unlocked": self.unlocked,
         }
 
 
@@ -108,6 +110,10 @@ def context(conn: sqlite3.Connection, profile_id: int, now: float | None = None)
     ).fetchall()
 
     candidates: list[tuple[float, str, float]] = []  # (left_s, reason, over_s)
+    # A parent pressed Unlock: nothing that was stopping him counts for the rest of the day. A limit started after
+    # it still does (unlocking closes the earlier ones), and End now locks again (it closes the unlock).
+    unlocked = any(o["kind"] == "unlock" and (o["ends_at"] or 0) > now for o in ovr)
+    ctx.unlocked = unlocked
 
     # Daily allowance (watched time), plus any extra minutes a parent gave today.
     # Vacation mode (set from the page or Home Assistant) uses the weekend allowance every day.
@@ -115,13 +121,13 @@ def context(conn: sqlite3.Connection, profile_id: int, now: float | None = None)
     weekend = time.localtime(now - ROLLOVER_HOUR * 3600).tm_wday >= 5 or bool(vac and vac["value"] == "1")
     cap_min = lim["weekend_min"] if weekend else lim["weekday_min"]
     extra_s = sum(o["minutes"] * 60 for o in ovr if o["kind"] == "extra")
-    if cap_min is not None:
+    if cap_min is not None and not unlocked:
         ctx.daily_s = cap_min * 60 + extra_s
         left = ctx.daily_s - ctx.used_today_s
         candidates.append((left, "Daily time used up" if left <= 0 else "Daily time", max(0, -left)))
 
     # One sitting (watched time), then a break.
-    if lim["session_min"]:
+    if lim["session_min"] and not unlocked:
         s = conn.execute("SELECT * FROM sessions WHERE profile_id = ?", (profile_id,)).fetchone()
         if s and now - s["last_at"] < lim["break_min"] * 60:
             left = lim["session_min"] * 60 + extra_s - s["seconds"]
@@ -139,7 +145,6 @@ def context(conn: sqlite3.Connection, profile_id: int, now: float | None = None)
 
     # Closed hours (wall clock).
     cf, ct = _hhmm(lim["closed_from"]), _hhmm(lim["closed_to"])
-    unlocked = any(o["kind"] == "unlock" and (o["ends_at"] or 0) > now for o in ovr)
     if cf is not None and ct is not None and cf != ct and not unlocked:
         m = _minutes_of_day(now)
         inside = (cf <= m < ct) if cf < ct else (m >= cf or m < ct)
@@ -221,8 +226,11 @@ def add_override(conn: sqlite3.Connection, profile_id: int, kind: str, *, minute
         ends_at = day_end(now)
         conn.execute("UPDATE overrides SET done = 1 WHERE profile_id = ? AND kind IN ('unlock', 'lastone')", (profile_id,))
     elif kind == "unlock":
-        ends_at = now + (minutes or 60) * 60
-        conn.execute("UPDATE overrides SET done = 1 WHERE profile_id = ? AND kind = 'lock'", (profile_id,))
+        # Until the day rolls over, not for a set time: Unlock means unlock (the owner, 2026-11-23). It ends what
+        # was stopping him: End now, Last one, and any timed limit already running.
+        ends_at = day_end(now)
+        conn.execute("UPDATE overrides SET done = 1 WHERE profile_id = ? AND kind IN ('lock', 'lastone', 'oneoff')",
+                     (profile_id,))
     return conn.execute(
         "INSERT INTO overrides (profile_id, kind, day, minutes, starts_at, ends_at, note) VALUES (?, ?, ?, ?, ?, ?, ?)",
         (profile_id, kind, day, minutes, now, ends_at, note),
@@ -253,7 +261,7 @@ def apply_action(conn: sqlite3.Connection, profile_id: int, action: str, minutes
     elif action == "lock":
         add_override(conn, profile_id, "lock")
     elif action == "unlock":
-        add_override(conn, profile_id, "unlock", minutes=minutes or 60)
+        add_override(conn, profile_id, "unlock")  # `minutes` is ignored: it lasts until tomorrow
     else:
         raise ValueError(f"Unknown action {action!r}.")
 

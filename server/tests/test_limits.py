@@ -113,7 +113,7 @@ def test_last_one_and_end_now(env):
     assert tv.post(f"{V}/heartbeat", json=hb).json()["command"] is None
     assert tv.post(f"{V}/heartbeat", json=dict(hb, state="ended")).json()["command"] == "timeup"
     assert _visible(tv, pid)[1] == []
-    env.client.post(f"/api/admin/kids/{pid}/unlock", json={"minutes": 30})
+    env.client.post(f"/api/admin/kids/{pid}/unlock", json={})
     assert _visible(tv, pid)[1] == sorted(ids)
     env.client.post(f"/api/admin/kids/{pid}/lock", json={})
     r = tv.post(f"{V}/heartbeat", json=hb).json()
@@ -158,3 +158,41 @@ def test_day_key_rolls_over_at_four():
     t = time.mktime((2026, 11, 23, 3, 30, 0, 0, 0, -1))
     assert clock.day_key(t) == "2026-11-22"
     assert clock.day_key(t + 3600) == "2026-11-23"
+
+
+def _midday() -> float:
+    lt = time.localtime()
+    return time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, 12, 0, 0, 0, 0, -1))
+
+
+def test_unlock_just_unlocks_until_tomorrow(env):
+    """The owner, 2026-11-23: Unlock should not be for a time period; it should just unlock. It used to lift only
+    End now and closed hours, for an hour, so with daily time used up it did nothing."""
+    pid = env.client.post("/api/admin/profiles", json={"name": "Sam"}).json()["id"]
+    env.client.put(f"/api/admin/limits/{pid}", json={"weekday_min": 30, "weekend_min": 30, "grace_min": 0})
+    now = _midday()  # far from the day rollover, whenever the tests run
+    with env.db.conn() as c:
+        c.execute("INSERT INTO watch_time (profile_id, day, seconds) VALUES (?, ?, ?)", (pid, clock.day_key(now), 3600))
+        assert clock.context(c, pid, now).open is False  # daily time used up
+        clock.add_override(c, pid, "unlock", now=now)
+        ctx = clock.context(c, pid, now)
+        assert ctx.open is True and ctx.unlocked is True and ctx.limited is False
+        assert clock.context(c, pid, now + 2 * 3600).open is True  # not just for an hour
+        clock.add_override(c, pid, "oneoff", minutes=15, now=now)  # a limit started after unlocking still counts
+        assert clock.context(c, pid, now + 16 * 60).open is False
+        clock.add_override(c, pid, "unlock", now=now + 16 * 60)  # and unlocking again lifts it
+        assert clock.context(c, pid, now + 16 * 60).open is True
+        clock.add_override(c, pid, "lock", now=now)  # End now locks again
+        assert clock.context(c, pid, now + 17 * 60).open is False
+
+
+def test_unlock_lifts_closed_hours_for_the_rest_of_the_day(env):
+    pid = env.client.post("/api/admin/profiles", json={"name": "Sam"}).json()["id"]
+    now = _midday()  # far from the day rollover, whenever the tests run
+    m = clock._minutes_of_day(now)
+    start, end = f"{(m - 30) % 1440 // 60:02d}:{(m - 30) % 60:02d}", f"{(m + 90) % 1440 // 60:02d}:{(m + 90) % 60:02d}"
+    env.client.put(f"/api/admin/limits/{pid}", json={"closed_from": start, "closed_to": end})
+    with env.db.conn() as c:
+        assert clock.context(c, pid, now).open is False
+        clock.add_override(c, pid, "unlock", now=now)
+        assert clock.context(c, pid, now + 80 * 60).open is True  # past the old one-hour unlock

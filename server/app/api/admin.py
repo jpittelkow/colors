@@ -275,7 +275,7 @@ def add(body: AddIn, request: Request) -> dict:
 def items(
     request: Request, approval: str | None = None, container_id: int | None = None, source: str | None = None,
     q: str | None = None, limit: int = 300, offset: int = 0, profile_id: int | None = None,
-    hide_failed: bool = False, total: bool = False,
+    hide_failed: bool = False, total: bool = False, order: str = "added",
 ) -> list[dict] | dict:
     """Items, newest first. `total=true` answers {items, total} so the page can number its pages."""
     sql = (
@@ -312,7 +312,9 @@ def items(
     if hide_failed:  # the Approve list: failed and stopped downloads belong to Downloads (ADR 0037)
         sql += " AND i.status <> 'failed'"
     count_sql, count_params = f"SELECT count(*) FROM ({sql})", list(params)
-    sql += " ORDER BY i.added_at DESC, i.id DESC LIMIT ? OFFSET ?"
+    # "title": A-Z, for the Library's Videos view (2026-11-24); otherwise newest first.
+    sql += (" ORDER BY i.title COLLATE NOCASE, i.id" if order == "title" else " ORDER BY i.added_at DESC, i.id DESC")
+    sql += " LIMIT ? OFFSET ?"
     params += [min(max(limit, 1), 1000), max(offset, 0)]
     with _db(request).conn() as c:
         rows = [dict(r) for r in c.execute(sql, params)]

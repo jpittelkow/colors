@@ -5,7 +5,7 @@ import json
 import time
 
 from .ai import openrouter, picks, suggest
-from .downloads import importer, subscriptions
+from .downloads import importer, subscriptions, ytdlp_update
 from .jobs_registry import Job, Run
 from .sources import plex
 
@@ -56,11 +56,21 @@ def _pictures(run: Run) -> str:
 
 
 def _ytdlp(run: Run) -> str:
+    """Daily: a newer yt-dlp is installed and used at once (Jeff, 2026-11-24: "make the yt-dlp update automatic").
+    If that fails, the Jobs page keeps offering the Update button."""
     v = run.state.downloader.versions()
+    if v["have"] != v["newest"]:
+        try:
+            out = ytdlp_update.update(run.state.cfg.data_dir)
+            v = {"have": out["version"], "newest": v["newest"]}
+            note = f"yt-dlp updated from {out['from']} to {out['version']}"
+        except Exception as exc:
+            run.db.set_setting("ytdlp_versions", json.dumps({**v, "checked_at": time.time()}))
+            raise RuntimeError(f"yt-dlp {v['newest']} is out but the update failed: {exc}") from exc
+    else:
+        note = f"yt-dlp {v['have']} is the newest"
     run.db.set_setting("ytdlp_versions", json.dumps({**v, "checked_at": time.time()}))
-    if v["have"] == v["newest"]:
-        return f"yt-dlp {v['have']} is the newest"
-    return f"yt-dlp {v['have']} installed, {v['newest']} available: Update yt-dlp on the Jobs page"
+    return note
 
 
 def _retry_failed(run: Run) -> str:
@@ -98,7 +108,7 @@ def all_jobs() -> list[Job]:
             enabled=_plex_on, disabled_note="Plex is not connected."),
         Job("pictures", "Channel pictures", "Fetches missing channel pictures and refreshes ones older than 30 days.",
             _pictures, every_s=24 * HOUR, stoppable=True),
-        Job("ytdlp", "yt-dlp version", "Checks for a newer yt-dlp. Update it from this page; no rebuild needed.",
+        Job("ytdlp", "yt-dlp version", "Installs a newer yt-dlp when there is one, without a rebuild or a restart.",
             _ytdlp, every_s=24 * HOUR),
         Job("ai-suggest", "AI suggestions", "Asks the AI for channels to consider; they land in Add › Ideas.",
             _suggest, every_s=7 * 24 * HOUR, stoppable=True, enabled=_ai_ready, disabled_note=AI_OFF),

@@ -56,8 +56,9 @@ def test_jobs_run_by_hand_and_are_recorded(env):
     assert "channels" in names and "import-read" not in names
     assert reg.start_job("ytdlp", wait=True)
     hist = env.client.get("/api/admin/background-jobs/ytdlp/history").json()
-    assert hist[0]["state"] == "done" and ("Update yt-dlp" in hist[0]["result"] or "is the newest" in hist[0]["result"])
-    assert env.client.get("/api/admin/background-jobs").json()["ytdlp"]["newest"] == "2026.02.02"
+    assert hist[0]["state"] == "done" and hist[0]["result"] == "yt-dlp updated from 2026.01.01 to 2026.02.02"
+    v = env.client.get("/api/admin/background-jobs").json()["ytdlp"]
+    assert v["have"] == v["newest"] == "2026.02.02"  # updated: nothing left to offer
 
 
 def test_switched_off_jobs_refuse_to_run(env):
@@ -382,3 +383,25 @@ def test_a_reply_cut_off_mid_list_still_gives_a_row(env, monkeypatch):
     with env.db.conn() as c:
         assert c.execute("SELECT state FROM job_runs WHERE job = 'ai-picks' ORDER BY id DESC").fetchone()[0] == "failed"
     assert len(fake.sent) == 2  # asked once more before giving up
+
+
+def test_a_failed_automatic_ytdlp_update_keeps_the_button(env, monkeypatch):
+    from app.downloads import ytdlp_update
+
+    def broken(data_dir):
+        raise RuntimeError("pip failed: no network")
+
+    monkeypatch.setattr(ytdlp_update, "update", broken)
+    env.app.state.registry.start_job("ytdlp", wait=True)
+    run = env.client.get("/api/admin/background-jobs/ytdlp/history").json()[0]
+    assert run["state"] == "failed" and "no network" in (run.get("error") or run.get("result") or "")
+    v = env.client.get("/api/admin/background-jobs").json()["ytdlp"]
+    assert (v["have"], v["newest"]) == ("2026.01.01", "2026.02.02")  # the page still offers Update yt-dlp
+
+
+def test_library_videos_can_come_a_to_z(env):
+    ids = env.client.post("/api/admin/add", json={"urls": [f"https://example.test/watch?v={v}" for v in ("c", "a", "b")],
+                                                  "approve": True}).json()["added"]
+    by = lambda order: [r["title"] for r in env.client.get("/api/admin/items", params={"approval": "approved", "order": order}).json()]
+    assert by("title") == ["Video a", "Video b", "Video c"]
+    assert by("added") == ["Video b", "Video a", "Video c"]  # newest first, as before

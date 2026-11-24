@@ -340,14 +340,17 @@ async function viewLibrary() {
   const box = h("div", { class: "kt-stack", style: "gap:16px" });
   const who = h("div", { class: "kt-row" });
   const view = h("div", { class: "seg", role: "group", "aria-label": "Show" });
-  const inLibrary = chans.filter((c) => c.approved > 0 || c.sub_id || c.profile_ids.length);
+  // A to Z, ignoring case and a leading "The" (2026-11-24).
+  const sortName = (t) => t.replace(/^the\s+/i, "");
+  const inLibrary = chans.filter((c) => c.approved > 0 || c.sub_id || c.profile_ids.length)
+    .sort((a, b) => sortName(a.title).localeCompare(sortName(b.title), undefined, { sensitivity: "base", numeric: true }));
   const onlyWaiting = chans.filter((c) => !inLibrary.includes(c) && c.waiting).length;
   let videos = [], total = 0;
 
   // One page at a time, numbered (the owner: pages, not "Show more").
   const loadVideos = async (reset) => {
     if (reset) libState.page = 1;
-    const r = await api(`/items?approval=approved&total=true&limit=${PAGE}&offset=${(libState.page - 1) * PAGE}` + (libState.who ? `&profile_id=${libState.who}` : ""));
+    const r = await api(`/items?approval=approved&total=true&order=title&limit=${PAGE}&offset=${(libState.page - 1) * PAGE}` + (libState.who ? `&profile_id=${libState.who}` : ""));
     videos = r.items; total = r.total;
   };
   const draw = () => {

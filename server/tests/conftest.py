@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Config
-from app.downloads import jobs
+from app.downloads import jobs, ytdlp_update
 from app.downloads.ytdlp import Downloaded, Listing, VideoInfo
 from app.main import create_app
 
@@ -76,6 +76,8 @@ class FakeDownloader:
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     monkeypatch.setattr(jobs, "RETRY_DELAYS", ())  # a failure is final at once, unless a test sets delays
+    # Never a real pip install from a test: the daily yt-dlp job updates by itself when the fake says one is out.
+    monkeypatch.setattr(ytdlp_update, "update", lambda data_dir: {"updated": True, "from": "2026.01.01", "version": "2026.02.02"})
     cfg = Config(data_dir=tmp_path / "data", library_dir=tmp_path / "library", run_worker=False)
     fake = FakeDownloader(cfg.library_dir)
     app = create_app(cfg, downloader=fake)

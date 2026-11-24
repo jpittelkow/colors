@@ -56,7 +56,7 @@ def test_jobs_run_by_hand_and_are_recorded(env):
     assert "channels" in names and "import-read" not in names
     assert reg.start_job("ytdlp", wait=True)
     hist = env.client.get("/api/admin/background-jobs/ytdlp/history").json()
-    assert hist[0]["state"] == "done" and "rebuild the image" in hist[0]["result"]
+    assert hist[0]["state"] == "done" and ("Update yt-dlp" in hist[0]["result"] or "is the newest" in hist[0]["result"])
     assert env.client.get("/api/admin/background-jobs").json()["ytdlp"]["newest"] == "2026.02.02"
 
 

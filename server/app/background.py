@@ -60,7 +60,7 @@ def _ytdlp(run: Run) -> str:
     run.db.set_setting("ytdlp_versions", json.dumps({**v, "checked_at": time.time()}))
     if v["have"] == v["newest"]:
         return f"yt-dlp {v['have']} is the newest"
-    return f"yt-dlp {v['have']} installed, {v['newest']} available: rebuild the image to update"
+    return f"yt-dlp {v['have']} installed, {v['newest']} available: Update yt-dlp on the Jobs page"
 
 
 def _retry_failed(run: Run) -> str:
@@ -98,7 +98,7 @@ def all_jobs() -> list[Job]:
             enabled=_plex_on, disabled_note="Plex is not connected."),
         Job("pictures", "Channel pictures", "Fetches missing channel pictures and refreshes ones older than 30 days.",
             _pictures, every_s=24 * HOUR, stoppable=True),
-        Job("ytdlp", "yt-dlp version", "Checks for a newer yt-dlp. Updating means rebuilding the server image.",
+        Job("ytdlp", "yt-dlp version", "Checks for a newer yt-dlp. Update it from this page; no rebuild needed.",
             _ytdlp, every_s=24 * HOUR),
         Job("ai-suggest", "AI suggestions", "Asks the AI for channels to consider; they land in Add › Ideas.",
             _suggest, every_s=7 * 24 * HOUR, stoppable=True, enabled=_ai_ready, disabled_note=AI_OFF),

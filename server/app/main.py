@@ -16,6 +16,7 @@ from .channel_pics import ChannelPics
 from .config import Config
 from .db import Database, migrate
 from .downloads.jobs import Worker
+from .downloads import ytdlp_update
 from .downloads.ytdlp import YtDlp
 from .jobs_registry import Registry
 from .security import Signer, hash_password
@@ -37,6 +38,7 @@ def create_app(cfg: Config | None = None, downloader=None) -> FastAPI:
     cfg = cfg or Config.from_env()
     cfg.data_dir.mkdir(parents=True, exist_ok=True)
     cfg.library_dir.mkdir(parents=True, exist_ok=True)
+    ytdlp_update.activate(cfg.data_dir)  # a yt-dlp updated from the page, when newer than the image's
     migrate(cfg.db_path, cfg.migrations_dir)
     db = Database(cfg.db_path)
     first_password = os.environ.get("KIDTUBE_ADMIN_PASSWORD", "")

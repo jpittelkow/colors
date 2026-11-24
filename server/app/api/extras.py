@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from .. import channel_pics
 from ..db import Database
-from ..downloads import importer, pacing
+from ..downloads import importer, pacing, ytdlp_update
 from . import downloads as downloads_api
 from .admin import require_admin
 
@@ -118,6 +118,18 @@ def background_jobs(request: Request) -> dict:
                      key=lambda r: r["started_at"])
     return {"jobs": reg.describe(), "running": running, "now": time.time(),
             "checks_paused": db.get_setting("checks_paused") == "1", "ytdlp": versions}
+
+
+@router.post("/ytdlp/update")
+def ytdlp_update_now(request: Request) -> dict:
+    """Install the newest yt-dlp into the data folder and switch to it, without a new image or a restart."""
+    db = _db(request)
+    try:
+        out = ytdlp_update.update(request.app.state.cfg.data_dir)
+    except Exception as exc:
+        raise HTTPException(502, f"Couldn't update yt-dlp: {exc}")
+    db.set_setting("ytdlp_versions", json.dumps({"have": out["version"], "newest": out["version"], "checked_at": time.time()}))
+    return out
 
 
 @router.post("/background-jobs/{name}/run")

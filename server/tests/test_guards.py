@@ -53,11 +53,12 @@ def test_tv_responses_never_leak_paths_or_tokens(env):
 
 
 def test_only_the_downloads_module_imports_yt_dlp():
-    """ADR 0004: network access to YouTube stays in one file, so tests can swap it."""
+    """ADR 0004: network access to YouTube stays in one file, so tests can swap it. The updater names yt_dlp too,
+    to install a new one and drop the old one from memory, but never calls YouTube."""
     offenders = [
         p.relative_to(APP_DIR).as_posix()
         for p in APP_DIR.rglob("*.py")
-        if "yt_dlp" in p.read_text(encoding="utf-8") and p.name != "ytdlp.py"
+        if "yt_dlp" in p.read_text(encoding="utf-8") and p.name not in ("ytdlp.py", "ytdlp_update.py")
     ]
     assert not offenders, offenders
 

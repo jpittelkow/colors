@@ -1415,7 +1415,14 @@ async function viewJobs() {
     }
     fillIfChanged(notes, `${bg.checks_paused}|${yt.have}|${yt.newest}`, () => [
       bg.checks_paused ? h("div", { class: "kt-banner kt-banner--warn" }, h("span", {}, "Scheduled jobs are paused.")) : null,
-      yt.have && yt.newest && yt.have !== yt.newest ? h("div", { class: "kt-banner kt-banner--warn" }, h("span", {}, h("strong", {}, `yt-dlp ${yt.newest} is out. `), `This server has ${yt.have}. Rebuild the image to update (bash scripts/deploy.sh).`)) : null]);
+      yt.have && yt.newest && yt.have !== yt.newest ? h("div", { class: "kt-banner kt-banner--warn" }, h("span", {}, h("strong", {}, `yt-dlp ${yt.newest} is out. `), `This server has ${yt.have}. `),
+        h("button", { class: "kt-btn kt-btn--primary", type: "button", onclick: (e) => run(async () => {
+          busy(e.currentTarget);
+          const r = await api("/ytdlp/update", { method: "POST" });
+          toast(r.updated ? `yt-dlp ${r.version} is in use now.` : `yt-dlp ${r.version} is already the newest.`);
+          first = true;
+          await tick();
+        }) }, "Update yt-dlp")) : null]);
     drawLive(bg);
     // Leave the cards alone while a schedule box is being typed in. Only a box or a dropdown counts: a pressed
     // Run now / Save button keeps focus too, and treating that as typing froze the page after any click.

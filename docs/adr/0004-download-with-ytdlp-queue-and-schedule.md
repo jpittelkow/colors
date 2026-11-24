@@ -60,3 +60,7 @@ The 6-hourly retry put 287 failed downloads back at once; the queue ran them bac
 - The same day: a **PO token helper** (bgutil, its own container) and its yt-dlp plugin, set by `KIDTUBE_POT_URL`,
   so YouTube gets the proof-of-origin tokens it now expects. The break stays as the fallback. A cookies file from a
   spare Google account was the alternative: more reliable, but it puts an account at risk.
+- Also the same day: **yt-dlp updates from the page, without a new image** ("Update yt-dlp" on the Jobs page when the
+  daily check finds a newer one). It is installed into `<data>/pylib` (only yt-dlp and the yt-dlp-ejs it pins) and
+  loaded in place, no restart; at startup that copy is used only while it is newer than the image's
+  (`server/app/downloads/ytdlp_update.py`).

@@ -2,11 +2,13 @@
 
 A new file every few days, the last few kept, so there is about a fortnight to look back on and the folder never
 grows. Every failed request is written down with why it failed (a 422 used to leave nothing but its status code),
-and so are slow requests and crashes. Paths only, never query strings: stream links carry a signed token.
+and so are slow requests and crashes. Paths only, never query strings, with a stream link's signed token masked
+(`safe_path`), and never the values a rejected request carried (one can be a password).
 """
 from __future__ import annotations
 
 import logging
+import re
 import time
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
@@ -25,6 +27,13 @@ FMT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
 log = logging.getLogger("kidtube.http")
 
+_TOKEN_PATH = re.compile(r"/stream/[^/?]+")
+
+
+def safe_path(path: str) -> str:
+    """A request path fit for the log: no query string, and a stream link's signed token masked."""
+    return _TOKEN_PATH.sub("/stream/<token>", str(path).split("?", 1)[0])
+
 # The names a parent sees on the page, for "Check “Most downloads a day”: ..." instead of a field name.
 LABELS = {
     "url": "Link", "last_n": "How many of the latest", "min_s": "Shortest video", "max_s": "Longest video",
@@ -42,6 +51,7 @@ class _QuietAccess(logging.Filter):
         args = record.args if isinstance(record.args, tuple) else ()
         if len(args) >= 5:
             method, status = args[1], args[4]
+            record.args = (args[0], method, safe_path(args[2]), *args[3:])  # no tokens, no query strings
             try:
                 return method != "GET" or int(status) >= 400
             except (TypeError, ValueError):
@@ -85,8 +95,11 @@ def install(app: FastAPI) -> None:
     @app.exception_handler(RequestValidationError)
     async def bad_values(request: Request, exc: RequestValidationError):
         errs = jsonable_encoder(exc.errors())
-        brief = [(".".join(str(x) for x in e.get("loc", [])[1:]), e.get("msg"), e.get("input")) for e in errs[:5]]
-        log.warning("422 %s %s: %s", request.method, request.url.path, brief)
+        for e in errs:
+            e.pop("input", None)  # never echo or log what was typed: it can be a password
+            e.pop("ctx", None)
+        brief = [(".".join(str(x) for x in e.get("loc", [])[1:]), e.get("msg")) for e in errs[:5]]
+        log.warning("422 %s %s: %s", request.method, safe_path(request.url.path), brief)
         first = errs[0] if errs else {}
         field = str((first.get("loc") or [""])[-1])
         label = LABELS.get(field, field.replace("_", " "))
@@ -96,9 +109,9 @@ def install(app: FastAPI) -> None:
     @app.exception_handler(StarletteHTTPException)
     async def http_error(request: Request, exc: StarletteHTTPException):
         if exc.status_code >= 500:
-            log.error("%s %s %s: %s", exc.status_code, request.method, request.url.path, exc.detail)
+            log.error("%s %s %s: %s", exc.status_code, request.method, safe_path(request.url.path), exc.detail)
         elif exc.status_code not in (401, 404):  # signed out / missing thumbnails: too common to be news
-            log.warning("%s %s %s: %s", exc.status_code, request.method, request.url.path, exc.detail)
+            log.warning("%s %s %s: %s", exc.status_code, request.method, safe_path(request.url.path), exc.detail)
         return await http_exception_handler(request, exc)
 
     @app.middleware("http")
@@ -107,9 +120,9 @@ def install(app: FastAPI) -> None:
         try:
             response = await call_next(request)
         except Exception:
-            log.exception("500 %s %s crashed", request.method, request.url.path)
+            log.exception("500 %s %s crashed", request.method, safe_path(request.url.path))
             raise
         took = time.monotonic() - start
         if took > SLOW_S:
-            log.warning("slow: %s %s took %.1fs (%s)", request.method, request.url.path, took, response.status_code)
+            log.warning("slow: %s %s took %.1fs (%s)", request.method, safe_path(request.url.path), took, response.status_code)
         return response

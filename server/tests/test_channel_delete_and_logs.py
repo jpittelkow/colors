@@ -81,3 +81,12 @@ def test_log_file_rotates_every_few_days(tmp_path):
             for h in list(logging.getLogger(name).handlers):
                 logging.getLogger(name).removeHandler(h)
                 h.close()
+
+
+def test_logs_never_hold_tokens_query_strings_or_typed_values(env, caplog):
+    assert logs.safe_path("/api/tv/v1/stream/abc.def-123?x=1") == "/api/tv/v1/stream/<token>"
+    assert logs.safe_path("/api/admin/search?q=trains") == "/api/admin/search"
+    with caplog.at_level(logging.WARNING, logger="kidtube.http"):
+        r = env.client.post("/api/admin/auth/login", json={"password": "abc"})  # too short: a 422
+    assert r.status_code == 422 and "abc" not in r.text
+    assert "abc" not in caplog.text and "422" in caplog.text

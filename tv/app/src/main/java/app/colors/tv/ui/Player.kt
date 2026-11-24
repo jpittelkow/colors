@@ -217,10 +217,10 @@ fun PlayerScreen(nav: Nav, profile: Profile, itemId: Int, chain: Int) {
             onPlayPause = { if (player.isPlaying) player.pause() else player.play(); lastKey = System.currentTimeMillis() },
             onStartOver = { player.seekTo(0); player.play(); lastKey = System.currentTimeMillis() },
             onFocusMove = { lastKey = System.currentTimeMillis() })
-        // In the corner while a video plays: the name always, and with the controls up, a QR code to this child's page
-        // for grown-ups (kept off the picture otherwise, Jeff 2026-11-24).
-        CornerBadge("${nav.api.server}/admin/#kid/${profile.id}", showQr = p != null && controls,
-            modifier = Modifier.align(Alignment.TopEnd).offset(x = -s(40), y = s(40)))
+        // With the controls up only: the name and a QR code to this child's page for grown-ups. Nothing sits over the
+        // picture while it plays, so nothing still can burn into an OLED (Jeff 2026-11-24).
+        if (p != null && controls) CornerBadge("${nav.api.server}/admin/#kid/${profile.id}",
+            Modifier.align(Alignment.TopEnd).offset(x = -s(40), y = s(40)))
     }
     LaunchedEffect(Unit) { root.soon() }
 }
@@ -278,15 +278,15 @@ private fun Controls(
 
 private const val BADGE_W = 168
 
-/** The corner badge: "colors" on a dark card, with the grown-ups' QR code under it only while the controls are up. */
+/** The corner badge, shown with the controls: "colors" over the grown-ups' QR code on a dark card. */
 @Composable
-private fun CornerBadge(url: String, showQr: Boolean, modifier: Modifier = Modifier) {
+private fun CornerBadge(url: String, modifier: Modifier = Modifier) {
     val s = LocalScale.current
     Column(
         modifier.width(s(BADGE_W)).clip(RoundedCornerShape(s(24))).background(Color(0xB30B0B0B)).padding(vertical = s(14)),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(s(8)),
     ) {
         Wordmark(36)
-        if (showQr) QrCard(url, 128, "Grown-ups", labelPx = 18, small = true)
+        QrCard(url, 128, "Grown-ups", labelPx = 18, small = true)
     }
 }

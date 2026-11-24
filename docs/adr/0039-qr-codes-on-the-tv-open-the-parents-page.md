@@ -45,6 +45,6 @@ address). Amends ADR 0018 (pairing).
 
 ## Revision 2026-11-24: in the player, only with the controls
 
-The player's corner badge carried "colors" over a small grown-ups QR code all the time. Now the name stays and the
-QR code shows only while the controls are up: a grown-up who wants it presses a button, and the picture stays
-clear the rest of the time.
+The player's corner badge carried "colors" over a small grown-ups QR code all the time. Now the whole badge, name
+and QR code, shows only while the controls are up: a grown-up who wants it presses a button, and the picture stays
+clear the rest of the time. Nothing still sits over a playing video, so nothing can burn into an OLED screen.

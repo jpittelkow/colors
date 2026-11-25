@@ -334,8 +334,153 @@ function videoCard(it) {
     h("div", { class: "kt-video__body" }, h("div", { class: "kt-video__title" }, it.title), h("div", { class: "kt-muted" }, it.container_title)));
 }
 
+// ---- Not watched lately (ADR 0042): channels a boy can watch but hasn't started in a while. Suggests; never acts. --
+
+const gbText = (b) => b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : `${Math.max(1, Math.round(b / 1e6))} MB`;
+const kidName = (id) => (profiles.find((p) => p.id === id) || { name: "?" }).name;
+const unwatchedFor = (nw, who) => nw.channels.filter((ch) => ch.kids.some((k) => k.stale && (!who || k.profile_id === who)));
+const localDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+// A toast with Undo, for the actions on this list that can be taken back.
+function undoToast(text, undo) {
+  document.querySelector(".toast")?.remove();
+  const t = h("div", { class: "toast toast--undo", role: "status" }, h("span", {}, text),
+    undo ? h("button", { type: "button", onclick: () => { t.remove(); run(undo); } }, "Undo") : null);
+  document.body.append(t);
+  setTimeout(() => t.remove(), 6000);
+}
+
+function reasonText(r, name) {
+  if (!r) return null;
+  if (r.kind === "finished") return `${name} has finished all ${r.videos} video${r.videos === 1 ? "" : "s"}.`;
+  if (r.kind === "too_long") return `Every video is over ${r.shortest_min} min. ${name}'s daily limit is ${r.limit_min} min.`;
+  return null;
+}
+
+function unwatchedView(nw, chans, who, redraw) {
+  const list = unwatchedFor(nw, who);
+  const byId = new Map(chans.map((c) => [c.id, c]));
+  const drop = (ch) => { nw.channels = nw.channels.filter((x) => x !== ch); redraw(); };
+  const putBack = (ch) => {
+    if (!nw.channels.includes(ch)) nw.channels.push(ch);
+    nw.channels.sort((a, b) => b.days - a.days || a.title.localeCompare(b.title));
+    redraw();
+  };
+
+  const card = (ch) => {
+    const kids = ch.kids.filter((k) => !who || k.profile_id === who);
+    const stale = ch.kids.filter((k) => k.stale);
+    const fresh = ch.kids.filter((k) => !k.stale);
+    const pids = (byId.get(ch.id) || { profile_ids: [] }).profile_ids;
+    const local = ch.source === "local";
+    const pic = local ? chanAvatar(ch.external_id, ch.thumb_url, ch.title, "nw__pic") : plexPoster(ch.external_id, ch.title, "poster--round nw__pic");
+    const meta = [local ? null : "Plex", ch.sub_id ? (ch.sub_active ? "Subscribed" : "Downloads paused") : null,
+      `${ch.videos} video${ch.videos === 1 ? "" : "s"}`, local && ch.bytes ? gbText(ch.bytes) : null].filter(Boolean).join(" · ");
+    const acts = h("div", { class: "nw__actions" });
+    const btn = (label, cls, fn) => acts.append(h("button", { class: "kt-btn kt-btn--sm " + cls, type: "button", onclick: (e) => run(() => fn(e.currentTarget)) }, label));
+
+    if (ch.sub_id && ch.sub_active) btn("Pause downloads", "kt-btn--primary", async (b) => {
+      busy(b);
+      await api(`/subscriptions/${ch.sub_id}`, { method: "PATCH", body: { active: false } });
+      ch.sub_active = false;
+      redraw();
+      undoToast(`Downloads paused for ${ch.title}. Its videos stay.`, async () => {
+        await api(`/subscriptions/${ch.sub_id}`, { method: "PATCH", body: { active: true } });
+        ch.sub_active = true;
+        redraw();
+      });
+    });
+    // One boy still watches it: take it away from the other instead of deleting it.
+    if (fresh.length) for (const k of stale.filter((k) => pids.includes(k.profile_id))) btn(`Take away from ${kidName(k.profile_id)}`, "", async (b) => {
+      busy(b);
+      await api(`/channels/${ch.id}`, { method: "PATCH", body: { profile_ids: pids.filter((p) => p !== k.profile_id) } });
+      drop(ch);
+      undoToast(`${kidName(k.profile_id)} no longer sees ${ch.title}.`, async () => {
+        await api(`/channels/${ch.id}`, { method: "PATCH", body: { profile_ids: pids } });
+        putBack(ch);
+      });
+    });
+    btn("Rest 30 days", "", async (b) => {
+      busy(b);
+      const until = new Date();
+      until.setDate(until.getDate() + 30);
+      await api(`/channels/${ch.id}`, { method: "PATCH", body: { rested_until: localDay(until) } });
+      drop(ch);
+      undoToast(`${ch.title} is resting until ${until.toLocaleDateString()}.`, async () => {
+        await api(`/channels/${ch.id}`, { method: "PATCH", body: { rested_until: "" } });
+        putBack(ch);
+      });
+    });
+    if (local) btn(ch.bytes ? `Delete · frees ${gbText(ch.bytes)}` : "Delete", "kt-btn--danger", async (b) => {
+      // Two taps, the second says exactly what goes. This one can't be undone.
+      if (!b.dataset.sure) { b.dataset.sure = "1"; b.textContent = `Tap again: delete ${ch.title} and its videos`; return; }
+      busy(b);
+      const r = await api(`/channels/${ch.id}`, { method: "DELETE" });
+      drop(ch);
+      toast(`${ch.title} is gone: ${r.videos} video${r.videos === 1 ? "" : "s"} deleted.`);
+      kickActivity();
+    });
+    else btn("Stop allowing", "kt-btn--danger", async (b) => {
+      busy(b);
+      await api(`/plex/containers/${ch.id}`, { method: "DELETE" });
+      drop(ch);
+      toast(`${ch.title} removed. Plex keeps the files.`);
+    });
+    btn("Keep it", "kt-btn--quiet nw__keep", async (b) => {
+      busy(b);
+      await api(`/unwatched/${ch.id}/keep`, { method: "POST" });
+      drop(ch);
+      undoToast(`Keeping ${ch.title}. Off this list for 90 days.`, async () => {
+        await api(`/unwatched/${ch.id}/keep`, { method: "DELETE" });
+        putBack(ch);
+      });
+    });
+
+    const shownStale = kids.filter((k) => k.stale);
+    const top = Math.max(...shownStale.map((k) => k.days));
+    const onlyNever = shownStale.every((k) => k.never);
+    return h("article", { class: "nw" },
+      h("div", { class: "nw__head" },
+        h("a", { href: `#channel/${ch.id}`, class: "linkish", "aria-label": `Open ${ch.title}` }, pic),
+        h("div", { class: "nw__text" }, h("a", { class: "nw__title linkish", href: `#channel/${ch.id}` }, ch.title), h("div", { class: "kt-muted" }, meta)),
+        h("div", { class: "nw__since" }, `${top} d`, h("small", {}, onlyNever ? "since added" : "unwatched"))),
+      h("div", { class: "nw__who" }, kids.map((k) => {
+        const p = profiles.find((x) => x.id === k.profile_id) || { name: "?" };
+        const why = reasonText(k.reason, p.name);
+        return [
+          h("div", { class: "nw__kid" }, profileAvatar(p, "kt-avatar--xs"), h("span", { class: "nw__name" }, p.name),
+            h("span", { class: k.stale ? "nw__last nw__last--stale" : "nw__last" },
+              k.never ? ["Never watched", h("span", { class: "kt-muted" }, ` · in colors ${k.days} day${k.days === 1 ? "" : "s"}`)] : `Last watched ${ago(k.last_played)}`),
+            k.stale ? null : h("span", { class: "kt-tag kt-tag--ok nw__tag" }, "Still watching")),
+          why ? h("div", { class: "nw__why" }, h("span", { class: "kt-tag kt-tag--warn" }, `Why, maybe: ${why}`)) : null,
+        ];
+      })),
+      ch.sub_id && ch.sub_active && ch.new_since
+        ? h("div", { class: "kt-muted" }, `Still downloading: ${ch.new_since} new video${ch.new_since === 1 ? "" : "s"} since anyone last watched.`) : null,
+      acts);
+  };
+
+  const empty = nw.empty.filter((ch) => !who || ch.profile_ids.includes(who));
+  return [
+    h("p", { class: "nw-lead" }, `Channels ${who ? kidName(who) : "a boy"} can watch but hasn't started in ${nw.days} day${nw.days === 1 ? "" : "s"}, longest first. `,
+      h("a", { href: "#settings" }, "Change the days")),
+    list.length ? h("div", { class: "nw-list" }, list.map(card))
+      : h("div", { class: "empty" }, who ? `Every channel ${kidName(who)} can watch has been started in the last ${nw.days} days.`
+        : `Every channel has been watched in the last ${nw.days} days.`),
+    empty.length ? [
+      h("h2", { class: "kt-label" }, "Nothing to play"),
+      h("p", { class: "nw-lead" }, "Assigned, but no video is ready to watch. This is about downloads or approval, not the boys."),
+      h("div", { class: "kt-list" }, empty.map((ch) => h("a", { class: "kt-list__row", href: `#channel/${ch.id}` },
+        ch.source === "local" ? chanAvatar(ch.external_id, ch.thumb_url, ch.title) : plexPoster(ch.external_id, ch.title, "poster--sm"),
+        h("span", { class: "kt-list__text" }, h("strong", {}, ch.title),
+          h("span", { class: "kt-muted" }, [`For ${namesOf(ch.profile_ids)}`, ch.failed ? `${ch.failed} failed` : null,
+            ch.pending ? `${ch.pending} downloading` : null, ch.waiting ? `${ch.waiting} waiting for your yes` : null, "0 ready"].filter(Boolean).join(" · "))),
+        h("span", { class: "kt-list__value" }, "›"))))] : null,
+  ];
+}
+
 async function viewLibrary() {
-  const chans = await api("/channels");
+  const [chans, nw] = await Promise.all([api("/channels"), api("/unwatched").catch(() => null)]);
   const kids = profiles.filter((p) => p.kind === "child");
   const box = h("div", { class: "kt-stack", style: "gap:16px" });
   const who = h("div", { class: "kt-row" });
@@ -356,9 +501,13 @@ async function viewLibrary() {
   const draw = () => {
     fill(who, [{ id: 0, name: "Everyone" }, ...kids].map((p) => h("button", { class: "kt-chip", type: "button", "aria-pressed": libState.who === p.id ? "true" : "false",
       onclick: () => run(async () => { libState.who = p.id; if (libState.view === "videos") await loadVideos(true); draw(); }) }, p.name)));
-    fill(view, [["channels", "Channels"], ["videos", "Videos"]].map(([v, t]) => h("button", { type: "button", "aria-pressed": libState.view === v ? "true" : "false",
-      onclick: () => run(async () => { libState.view = v; if (v === "videos") { fill(box, skelGrid(4)); await loadVideos(true); } draw(); }) }, t)));
-    if (libState.view === "channels") {
+    const nwCount = nw ? unwatchedFor(nw, libState.who).length : 0;
+    fill(view, [["channels", "Channels"], ["videos", "Videos"], ...(nw ? [["unwatched", "Not watched lately"]] : [])].map(([v, t]) => h("button", { type: "button", "aria-pressed": libState.view === v ? "true" : "false",
+      onclick: () => run(async () => { libState.view = v; if (v === "videos") { fill(box, skelGrid(4)); await loadVideos(true); } draw(); }) },
+      t, v === "unwatched" && nwCount ? h("span", { class: "nw-count", "aria-label": `${nwCount} channels` }, String(nwCount)) : null)));
+    if (libState.view === "unwatched" && nw) {
+      fill(box, unwatchedView(nw, chans, libState.who, draw));
+    } else if (libState.view === "channels" || libState.view === "unwatched") {
       const shown = inLibrary.filter((c) => !libState.who || c.seen_by.includes(libState.who));
       fill(box, shown.length ? h("div", { class: "chan-grid" }, shown.map(channelCard))
         : h("div", { class: "empty" }, libState.who ? `Nothing for ${namesOf([libState.who])} yet. Open a channel and choose who can see it.` : "No channels yet."));
@@ -570,12 +719,12 @@ async function viewSubscribe(url, subId) {
     check_hours: num("check_hours", r.check_hours),
     daily_cap: num("daily_cap", r.daily_cap),
   };
-  let shorts = !!r.skip_shorts, live = !!r.skip_live;
+  let shorts = !!r.skip_shorts, live = !!r.skip_live, active = r.active !== 0 && r.active !== false;
   const rules = () => ({
     mode: f.mode.value, last_n: +f.last_n.value || 10, min_s: (+f.min.value || 0) * 60, max_s: (+f.max.value || 0) * 60,
     skip_shorts: shorts, skip_live: live, title_must: f.title_must.value, title_not: f.title_not.value,
     check_hours: +f.check_hours.value || 6, daily_cap: +f.daily_cap.value || 10,
-    keep_mode: f.keep_mode.value, keep_n: +f.keep_n.value || 30, keep_days: +f.keep_days.value || 60, active: true,
+    keep_mode: f.keep_mode.value, keep_n: +f.keep_n.value || 30, keep_days: +f.keep_days.value || 60, active,
   });
   const strip = (info.videos || []).slice(0, 3);
   const save = h("button", { class: "kt-btn kt-btn--primary kt-btn--wide", type: "button", onclick: (e) => run(async () => {
@@ -627,6 +776,7 @@ async function viewSubscribe(url, subId) {
           row(h("label", { for: "keep_days" }, "Days after watching"), f.keep_days, "For “Delete once both watched”")),
         h("h2", { class: "kt-label" }, "Checking"),
         h("div", { class: "kt-list" },
+          subId && sub ? row("Download new videos", switchBtn(active, "Download new videos", (v) => (active = v)), "Off: paused. Videos already here stay") : null,
           row(h("label", { for: "check_hours" }, "Check every (hours)"), f.check_hours),
           row(h("label", { for: "daily_cap" }, "Most downloads a day"), f.daily_cap, "Keeps big first imports gentle")))),
     subId && sub ? save : null);
@@ -796,6 +946,7 @@ async function viewChannel(id, tab = "library") {
     sub ? h("span", { class: "kt-tag kt-tag--ok" }, sub.mode === "new" ? "Subscribed: new videos come in" : "Subscribed") : null,
     local && c.trusted ? h("span", { class: "kt-tag kt-tag--ok" }, "Always approved") : local && sub ? h("span", { class: "kt-tag" }, "New videos wait for your yes") : null,
     sub && sub.last_error ? h("span", { class: "kt-tag kt-tag--warn", title: sub.last_error }, "Last check failed") : null,
+    sub && !sub.active ? h("span", { class: "kt-tag kt-tag--warn" }, "Downloads paused") : null,
   ];
   screen(c.title, { back: "library" },
     h("div", { class: "chan-head" },
@@ -806,6 +957,12 @@ async function viewChannel(id, tab = "library") {
         h("div", { class: "kt-row" },
           local ? h("a", { class: "kt-btn" + (sub ? "" : " kt-btn--primary"), href: `#channel-settings/${id}` }, sub ? "Subscription settings" : "Subscribe") : null,
           local && c.url ? h("a", { class: "kt-btn", href: c.url, target: "_blank", rel: "noopener noreferrer" }, "Open on YouTube ↗") : null,
+          sub && !sub.active ? h("button", { class: "kt-btn kt-btn--primary", type: "button", onclick: (e) => run(async () => {
+            busy(e.currentTarget);
+            await api(`/subscriptions/${sub.id}`, { method: "PATCH", body: { active: true } });
+            toast("Downloads resumed");
+            viewChannel(id, tab);
+          }) }, "Resume downloads") : null,
           sub ? h("button", { class: "kt-btn", type: "button", onclick: (e) => run(async () => {
             busy(e.currentTarget);
             const r = await api(`/subscriptions/${sub.id}/check`, { method: "POST" });
@@ -1167,7 +1324,17 @@ async function viewSettingsMenu() {
         row("Even out the volume", switchBtn(st.level_volume !== false, "Even out the volume", (v) => run(async () => {
           await api("/settings", { method: "PUT", body: { level_volume: v } });
           toast(v ? "Volume evened out on the TVs from the next video" : "Videos play at their own volume again");
-        })), st.loudness ? `Quiet videos up, loud ones down, loud moments softened. ${st.loudness.measured} of ${st.loudness.videos} videos measured` : "Quiet videos up, loud ones down, loud moments softened")),
+        })), st.loudness ? `Quiet videos up, loud ones down, loud moments softened. ${st.loudness.measured} of ${st.loudness.videos} videos measured` : "Quiet videos up, loud ones down, loud moments softened"),
+        row(h("label", { for: "unwatched_days" }, "“Not watched lately” after"),
+          h("span", { class: "kt-row", style: "margin-left:auto; flex-wrap:nowrap" },
+            h("input", { id: "unwatched_days", class: "kt-input num", type: "number", min: 1, max: 365, value: st.unwatched_days || 30,
+              onchange: (e) => run(async () => {
+                const n = Math.max(1, Math.min(365, Math.round(+e.target.value || 30)));
+                e.target.value = n;
+                await api("/settings", { method: "PUT", body: { unwatched_days: n } });
+                toast(`Library › Not watched lately now lists channels not started in ${n} days`);
+              }) }), h("span", { class: "kt-muted" }, "days")),
+          "Library lists channels a boy hasn't started in this long")),
       group("Safety",
         sub("Blocked words and parts to skip", "Words that always wait for you; sponsor reads, intros to skip",
           val(`${nWords} word${nWords === 1 ? "" : "s"} · ${nSkips} skipped`), "safety")),

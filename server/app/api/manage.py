@@ -11,7 +11,7 @@ import time
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from ..curation import blocklist
+from ..curation import blocklist, unwatched
 from ..db import Database
 from ..downloads import jobs, loudness, subscriptions
 from ..limits import clock
@@ -239,6 +239,43 @@ def subscription_update(sid: int, body: Rules, request: Request) -> dict:
 @router.post("/subscriptions/{sid}/check")
 def subscription_check(sid: int, request: Request) -> dict:
     return subscriptions.check(_db(request), request.app.state.downloader, sid)
+
+
+class SubscriptionPatch(BaseModel):
+    active: bool
+
+
+@router.patch("/subscriptions/{sid}")
+def subscription_patch(sid: int, body: SubscriptionPatch, request: Request) -> dict:
+    """Pause or resume one subscription's downloads (ADR 0042). Its videos and rules stay as they are."""
+    with _db(request).conn() as c:
+        if not c.execute("UPDATE subscriptions SET active = ? WHERE id = ?", (int(body.active), sid)).rowcount:
+            raise HTTPException(404, "No such subscription.")
+    return {"ok": True, "active": body.active}
+
+
+# ---- channels nobody watches (ADR 0042) -----------------------------------------------------------------------------
+
+
+@router.get("/unwatched")
+def unwatched_list(request: Request) -> dict:
+    return unwatched.report(_db(request), request.app.state.cfg.library_dir)
+
+
+@router.post("/unwatched/{cid}/keep")
+def unwatched_keep(cid: int, request: Request) -> dict:
+    """Keep it: off the list for 90 days."""
+    if not unwatched.keep(_db(request), cid):
+        raise HTTPException(404, "No such channel.")
+    return {"ok": True, "days": unwatched.KEEP_DAYS}
+
+
+@router.delete("/unwatched/{cid}/keep")
+def unwatched_unkeep(cid: int, request: Request) -> dict:
+    """Undo "Keep it"."""
+    with _db(request).conn() as c:
+        c.execute("UPDATE containers SET kept_until = NULL WHERE id = ?", (cid,))
+    return {"ok": True}
 
 
 @router.delete("/subscriptions/{sid}")
@@ -537,6 +574,7 @@ class SettingsIn(BaseModel):
     downloads_paused: bool | None = None
     storage_cap_gb: int | None = Field(default=None, ge=1, le=100000)
     level_volume: bool | None = None
+    unwatched_days: int | None = Field(default=None, ge=1, le=365)
 
 
 @router.get("/settings")
@@ -562,6 +600,7 @@ def settings_get(request: Request) -> dict:
         "disk": disk,
         "level_volume": loudness.is_on(db),
         "loudness": loudness.counts(db),
+        "unwatched_days": unwatched.days_setting(db),
     }
 
 
@@ -579,6 +618,8 @@ def settings_put(body: SettingsIn, request: Request) -> dict:
         db.set_setting("storage_cap_gb", str(body.storage_cap_gb))
     if body.level_volume is not None:
         db.set_setting("level_volume", "1" if body.level_volume else "0")
+    if body.unwatched_days is not None:
+        db.set_setting("unwatched_days", str(body.unwatched_days))
     return settings_get(request)
 
 

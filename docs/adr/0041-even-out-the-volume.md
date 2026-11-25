@@ -11,9 +11,9 @@ a video a scream or a burst of music jumps out over talking. Jeff asked for both
 
 ## Decision
 
-- **Measure once on the server.** A background job ("Volume levels", every 10 minutes) runs ffmpeg's `loudnorm`
-  analysis on each downloaded video's sound track: integrated loudness (EBU R128, LUFS) and true peak, stored on
-  the item. The file is read, never changed. A file ffmpeg can't read is marked done with no level, so it is not
+- **Measure once on the server.** A background job ("Volume levels", every 10 minutes) runs ffmpeg's `ebur128`
+  filter on each downloaded video's sound track: integrated loudness (EBU R128, LUFS) and true peak, stored on
+  the item. (`loudnorm` gives the same figure but resamples to 192 kHz first: ten times slower.) The file is read, never changed. A file ffmpeg can't read is marked done with no level, so it is not
   tried again.
 - **The play answer carries the adjustment**: `"audio": {"gain_db": …, "compress": true}`. The gain brings the
   video to -16 LUFS (a little under YouTube's -14, for a living room), at most +10 dB up and -15 dB down. A video
@@ -33,7 +33,7 @@ a video a scream or a burst of music jumps out over talking. Jeff asked for both
   downloaded videos, because only they are measured.
 - A Plex movie whose surround track goes to a soundbar undecoded (passthrough) gets no effect at all; Android can
   only process sound it decodes. YouTube downloads are always decoded.
-- The first run measures the whole library; each video takes a few seconds of CPU.
+- The first run measures the whole library; a 7-minute video takes about 2 seconds.
 - Overall a little quieter than before for loud channels: the TV volume may want a notch up once.
 
 ## Alternatives

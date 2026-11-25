@@ -1,13 +1,12 @@
 """Evening out the volume (ADR 0041): measure each downloaded video once, let the TV turn it up or down.
 
-The server only measures. ffmpeg's loudnorm filter reads the sound track (EBU R128: integrated loudness in LUFS and
+The server only measures. ffmpeg's ebur128 filter reads the sound track (EBU R128: integrated loudness in LUFS and
 the true peak) without touching the file. The play answer then carries the gain that brings this video to the
 household's target; the TV applies it, with a gentle compressor and a limiter for loud moments inside a video.
 Files are never changed, so switching it off is instant and complete.
 """
 from __future__ import annotations
 
-import json
 import logging
 import re
 import shutil
@@ -37,17 +36,19 @@ def ffmpeg_path(ffmpeg_dir: str | None) -> str:
 
 def measure(path: Path, ffmpeg: str = "ffmpeg") -> dict:
     """{"lufs": float, "peak": float} for the file's sound. Raises RuntimeError when ffmpeg can't read it."""
+    # ebur128, not loudnorm: the same integrated loudness, ten times faster (loudnorm resamples to 192 kHz first;
+    # 22 s against 2 s for a 7-minute video on LoudMouth, 2026-11-24).
     p = subprocess.run(
         [ffmpeg, "-hide_banner", "-nostats", "-nostdin", "-i", str(path), "-map", "0:a:0", "-vn", "-sn", "-dn",
-         "-af", "loudnorm=print_format=json", "-f", "null", "-"],
+         "-af", "ebur128=peak=true", "-f", "null", "-"],
         capture_output=True, text=True, timeout=TIMEOUT_S, encoding="utf-8", errors="replace")
-    m = re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", p.stderr)
-    if p.returncode or not m:
+    summary = (p.stderr or "").rsplit("Summary:", 1)
+    i = re.search(r"I:\s+(-?[\d.]+|-inf)\s+LUFS", summary[-1]) if len(summary) == 2 else None
+    tp = re.search(r"Peak:\s+(-?[\d.]+|-inf)\s+dBFS", summary[-1]) if len(summary) == 2 else None
+    if p.returncode or not i:
         tail = (p.stderr or "").strip().splitlines()[-1:] or ["no output"]
         raise RuntimeError(f"ffmpeg could not measure it: {tail[0][:200]}")
-    out = json.loads(m.group(0))
-    lufs, peak = float(out["input_i"]), float(out["input_tp"])  # "-inf" parses as -inf for a silent track
-    return {"lufs": lufs, "peak": peak}
+    return {"lufs": float(i.group(1)), "peak": float(tp.group(1)) if tp else None}  # "-inf": a silent track
 
 
 def gain_db(lufs: float | None, target: float = TARGET_LUFS) -> float:

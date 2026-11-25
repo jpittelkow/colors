@@ -350,3 +350,9 @@ textarea.kt-input { min-height: 140px; padding: var(--space-3); resize: vertical
 .toast--undo button { font: inherit; font-weight: 800; background: none; border: 0; color: var(--surface-200); text-decoration: underline; cursor: pointer; padding: 0; }
 @media (max-width: 439px) { .nw__keep { margin-left: 0; } }
 @media (min-width: 900px) { .nw-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } }
+
+/* Subscribe: the channel's address opens YouTube, a thumbnail plays the video here (2026-11-24) */
+.sub-url { color: var(--brand); font-size: 13px; line-height: 18px; font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+.sub-thumb { flex: 1 1 0; min-width: 0; padding: 0; border: 0; background: none; cursor: pointer; border-radius: var(--radius-sm); }
+.sub-thumb .kt-thumb { width: 100%; border-radius: var(--radius-sm); }
+.sub-thumb:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }

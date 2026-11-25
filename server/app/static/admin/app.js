@@ -727,6 +727,19 @@ async function viewSubscribe(url, subId) {
     keep_mode: f.keep_mode.value, keep_n: +f.keep_n.value || 30, keep_days: +f.keep_days.value || 60, active,
   });
   const strip = (info.videos || []).slice(0, 3);
+  // Tap a thumbnail to watch it here before subscribing; tap it again to close (2026-11-24: they did nothing).
+  const player = h("div", { class: "kt-stack sub-player", style: "gap:8px" });
+  player.hidden = true;
+  let playing = null;
+  const playHere = (v) => {
+    if (playing === v.external_id) { playing = null; player.hidden = true; fill(player); return; }
+    playing = v.external_id;
+    player.hidden = false;
+    fill(player, preview(v.external_id),
+      h("div", { class: "kt-row", style: "justify-content:space-between; flex-wrap:nowrap" },
+        h("strong", { style: "min-width:0; overflow-wrap:anywhere" }, v.title),
+        v.url ? h("a", { class: "kt-btn kt-btn--quiet", href: v.url, target: "_blank", rel: "noopener noreferrer" }, "YouTube ↗") : null));
+  };
   const save = h("button", { class: "kt-btn kt-btn--primary kt-btn--wide", type: "button", onclick: (e) => run(async () => {
     busy(e.target);
     if (subId) {
@@ -744,14 +757,18 @@ async function viewSubscribe(url, subId) {
   }).finally(() => busy(e.target, false)) }, subId && sub ? "Save" : "Subscribe");
   screen(subId && sub ? "Subscription" : "Subscribe", { back: subId ? `channel/${subId}` : "library" },
     h("div", { class: "kt-channel" }, chanAvatar(info.channel_id, info.avatar_url, info.title, "kt-avatar--lg"),
-      h("div", { class: "kt-video__body" }, h("div", { class: "kt-video__title" }, info.title), h("div", { class: "kt-muted" }, info.url))),
+      h("div", { class: "kt-video__body" }, h("div", { class: "kt-video__title" }, info.title),
+        info.url ? h("a", { class: "sub-url", href: info.url, target: "_blank", rel: "noopener noreferrer" }, info.url, " ↗") : null)),
     // At the top, where it is found (it used to sit under all the rules).
     subId && sub ? h("button", { class: "kt-btn kt-btn--danger", type: "button", style: "align-self:flex-start", onclick: () => run(async () => {
       const r = await api(`/subscriptions/${sub.id}`, { method: "DELETE" });
       toast(r.stopped ? `Unsubscribed. ${r.stopped} waiting download${r.stopped === 1 ? "" : "s"} stopped; downloaded videos stay.` : "Unsubscribed. Downloaded videos stay.");
       go(`channel/${subId}`);
     }) }, "Unsubscribe") : null,
-    strip.length ? h("div", { class: "kt-row", style: "flex-wrap:nowrap; gap:6px" }, strip.map((v) => thumb(v.thumb_url, { style: "width:33%; border-radius:var(--radius-sm)" }))) : null,
+    strip.length ? h("div", { class: "kt-row", style: "flex-wrap:nowrap; gap:6px" }, strip.map((v) =>
+      h("button", { class: "sub-thumb", type: "button", "aria-label": `Watch ${v.title}`, title: v.title, onclick: () => playHere(v) },
+        thumb(v.thumb_url || `https://i.ytimg.com/vi/${encodeURIComponent(v.external_id)}/mqdefault.jpg`, { time: v.duration_s })))) : null,
+    strip.length ? player : null,
     h("h2", { class: "kt-label" }, "Who can see this channel"),
     profileChips(pids, (next) => (pids = next)),
     h("div", { class: "kt-list" },

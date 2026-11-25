@@ -53,3 +53,11 @@ directly: breaks ADR 0009. No AI for the boys: rule-based rows only, which the o
 `server/app/ai/` (`openrouter.py`, `suggest.py`, `picks.py`, `budget.py`), `server/migrations/0003_*.sql`
 (`ai_calls`, `suggestions`, `picks`), `server/app/api/tv.py` (the row), `server/app/static/admin/app.js` (More › AI,
 Inbox › Suggested). Amends ADR 0013 and ADR 0014.
+
+## Revision 2026-11-24: no thinking before answering
+
+"Picked for you" failed now and then with "The model did not answer in JSON". The answers were about 60 tokens, but
+each call was billed about 1,000: Claude Haiku on OpenRouter thinks first, unseen, and when the thinking ran past
+the call's limit the answer was empty. Every call now asks for no thinking (`"reasoning": {"enabled": false}`):
+about 80 tokens, a third cheaper, the same kind of row. A model that refuses the switch is asked again without it.
+An empty answer cut off at the limit counts as an answer gone wrong, so "Picked for you" asks once more.

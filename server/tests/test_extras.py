@@ -287,6 +287,49 @@ def test_picks_only_reorder_visible_videos_and_never_name_the_boys(env, monkeypa
     assert [c["id"] for c in picked["cards"]] == [ids[3], ids[0], ids[1], ids[2], ids[4]]
 
 
+def test_picks_ask_again_when_the_model_thought_past_its_room(env, monkeypatch):
+    """2026-11-24: Haiku thought for ~900 hidden tokens; when that ran past max_tokens the answer was empty and the
+    job failed without asking again. Now thinking is asked off, and an empty cut-off answer gets the second try."""
+    sam, alex = kids(env)
+    ids = env.client.post("/api/admin/add", json={"urls": [f"https://example.test/watch?v={v}" for v in "abcd"],
+                                                  "approve": True}).json()["added"]
+    env.run_jobs()
+    fake = ai_on(env, monkeypatch, {"order": ids})
+    replies = iter([{"content": "", "finish_reason": "length"}])
+
+    def first_empty(method, url, key, body=None, timeout=60):
+        if body is not None and not url.endswith("/key"):
+            r = next(replies, None)
+            if r:
+                fake.sent.append(body)
+                return {"choices": [{"message": {"content": r["content"]}, "finish_reason": r["finish_reason"]}],
+                        "usage": {"completion_tokens": 1200}}
+        return fake(method, url, key, body, timeout)
+
+    monkeypatch.setattr(openrouter, "_http", first_empty)
+    env.client.patch(f"/api/admin/profiles/{alex}", json={"picks_on": False})  # one profile: one row
+    assert env.app.state.registry.start_job("ai-picks", wait=True)
+    assert all(b.get("reasoning") == {"enabled": False} for b in fake.sent)
+    assert len(fake.sent) == 2  # the empty answer, then the one that worked
+    with env.app.state.db.conn() as c:
+        got = json.loads(c.execute("SELECT item_ids FROM picks WHERE profile_id = ?", (sam,)).fetchone()[0])
+    assert got == ids
+
+
+def test_a_model_that_must_think_is_asked_again_without_the_switch(env, monkeypatch):
+    fake = ai_on(env, monkeypatch, {"ok": True})
+
+    def refuses(method, url, key, body=None, timeout=60):
+        if body is not None and "reasoning" in body:
+            fake.sent.append(body)
+            return {"error": {"message": "Reasoning is mandatory for this endpoint and cannot be disabled."}}
+        return fake(method, url, key, body, timeout)
+
+    monkeypatch.setattr(openrouter, "_http", refuses)
+    assert env.client.post("/api/admin/ai/try").status_code == 200
+    assert [("reasoning" in b) for b in fake.sent] == [True, False]
+
+
 def test_the_row_falls_back_and_can_be_switched_off(env, monkeypatch):
     sam, _ = kids(env)
     env.client.post("/api/admin/add", json={"urls": ["https://example.test/watch?v=a"], "approve": True})

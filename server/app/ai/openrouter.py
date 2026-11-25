@@ -17,9 +17,11 @@ DEFAULT_CAP_USD = 2.0
 
 
 class AIError(Exception):
-    """`text` is the model's raw reply when the trouble was the reply itself (not JSON, or cut off)."""
+    """`replied` is True when the model did answer and the trouble was the answer itself (not JSON, cut off, or
+    empty): asking again may well work. `text` is that raw answer, possibly empty."""
 
     text = ""
+    replied = False
 
 
 def settings(db: Database) -> dict:
@@ -84,14 +86,23 @@ def chat(db: Database, purpose: str, system: str, user: str, *, max_tokens: int 
         "max_tokens": max_tokens,
         "temperature": 0.4,
         "usage": {"include": True},
+        # No thinking first. Claude Haiku on OpenRouter thought for ~900 hidden tokens before a 60-token answer, and
+        # when the thinking ran past max_tokens no answer came at all: "Picked for you" failed now and then
+        # (2026-11-24). Off: ~80 tokens, a third cheaper, the same kind of row.
+        "reasoning": {"enabled": False},
     }
-    ok, error, usage, content = 1, "", {}, ""
+    ok, error, usage, content, finish = 1, "", {}, "", ""
     try:
         res = _http("POST", f"{API}/chat/completions", s["key"], body)
+        if res.get("error") and "reasoning" in str(res["error"]).lower():
+            body = {k: v for k, v in body.items() if k != "reasoning"}  # a model that has to think: let it
+            res = _http("POST", f"{API}/chat/completions", s["key"], body)
         if res.get("error"):
             raise AIError(str(res["error"].get("message") or res["error"]))
         usage = res.get("usage") or {}
-        content = ((res.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+        choice = (res.get("choices") or [{}])[0]
+        content = (choice.get("message") or {}).get("content") or ""
+        finish = choice.get("finish_reason") or ""
     except AIError as exc:
         ok, error = 0, str(exc)
         raise
@@ -104,9 +115,11 @@ def chat(db: Database, purpose: str, system: str, user: str, *, max_tokens: int 
                  int(usage.get("completion_tokens") or 0), float(usage.get("cost") or 0), ok, error[:300]),
             )
     try:
+        if not content.strip() and finish == "length":
+            raise AIError("The model ran out of room before it answered.")
         return parse_json(content)
     except AIError as exc:
-        exc.text = content  # a reply cut off by max_tokens may still hold what the caller needs
+        exc.text, exc.replied = content, True  # a reply cut off by max_tokens may still hold what the caller needs
         raise
 
 

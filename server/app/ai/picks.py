@@ -53,7 +53,7 @@ def build(db: Database, profile_id: int, label: str) -> int:
             # A reply cut off mid-list still names ids in order: keep the ones that were offered.
             got = [int(x) for x in re.findall(r"\d+", exc.text.split("order", 1)[-1])] if exc.text else []
             if not any(g in allowed for g in got):
-                if attempt == 2 or not exc.text:  # no reply at all (key, cap, network): asking again won't help
+                if attempt == 2 or not exc.replied:  # no reply at all (key, cap, network): asking again won't help
                     raise
                 continue
         break

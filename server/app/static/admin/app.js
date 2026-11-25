@@ -1163,7 +1163,11 @@ async function viewSettingsMenu() {
           toast(v ? "Vacation mode on: weekend time every day" : "Vacation mode off");
         })), "Weekend time every day"),
         sub("TVs", "Pair a TV, remove one", val(`${devices.filter((d) => !d.revoked).length} paired`), "tvs"),
-        sub("Profiles", "Add or remove a boy, a guest or a grown-up", val(`${profiles.length}`), "profiles")),
+        sub("Profiles", "Add or remove a boy, a guest or a grown-up", val(`${profiles.length}`), "profiles"),
+        row("Even out the volume", switchBtn(st.level_volume !== false, "Even out the volume", (v) => run(async () => {
+          await api("/settings", { method: "PUT", body: { level_volume: v } });
+          toast(v ? "Volume evened out on the TVs from the next video" : "Videos play at their own volume again");
+        })), st.loudness ? `Quiet videos up, loud ones down, loud moments softened. ${st.loudness.measured} of ${st.loudness.videos} videos measured` : "Quiet videos up, loud ones down, loud moments softened")),
       group("Safety",
         sub("Blocked words and parts to skip", "Words that always wait for you; sponsor reads, intros to skip",
           val(`${nWords} word${nWords === 1 ? "" : "s"} · ${nSkips} skipped`), "safety")),

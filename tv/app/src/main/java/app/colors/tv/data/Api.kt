@@ -154,6 +154,7 @@ class Api(context: Context) {
             skip = o.getJSONArray("skip_segments").objects().map { Segment(it.getDouble("start_s"), it.getDouble("end_s")) },
             heartbeatS = o.optInt("heartbeat_s", 15),
             time = time(o.getJSONObject("time")),
+            audio = o.optJSONObject("audio")?.let { Audio(it.optDouble("gain_db", 0.0).toFloat(), it.optBoolean("compress", true)) },
         )
     }
 
@@ -229,7 +230,10 @@ data class Segment(val startS: Double, val endS: Double)
 
 data class Play(
     val card: Card, val streamUrl: String, val resumeS: Double, val skip: List<Segment>, val heartbeatS: Int,
-    val time: TimeState,
+    val time: TimeState, val audio: Audio? = null,
 )
+
+/** Evening out the volume (ADR 0041): turn this video up or down by `gainDb`, and soften loud moments. Null = off. */
+data class Audio(val gainDb: Float, val compress: Boolean)
 
 data class Beat(val command: String?, val reason: String, val time: TimeState?)

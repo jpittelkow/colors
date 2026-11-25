@@ -5,7 +5,7 @@ import json
 import time
 
 from .ai import openrouter, picks, suggest
-from .downloads import importer, subscriptions, ytdlp_update
+from .downloads import importer, loudness, subscriptions, ytdlp_update
 from .jobs_registry import Job, Run
 from .sources import plex
 
@@ -88,6 +88,11 @@ def _picks(run: Run) -> str:
     return picks.run(run.db, run)
 
 
+def _loudness(run: Run) -> str:
+    cfg = run.state.cfg
+    return loudness.run(run.db, cfg.library_dir, loudness.ffmpeg_path(cfg.ffmpeg_dir), run)
+
+
 def _ai_ready(db) -> bool:
     return openrouter.is_on(db) and not openrouter.over_cap(db)
 
@@ -108,6 +113,9 @@ def all_jobs() -> list[Job]:
             enabled=_plex_on, disabled_note="Plex is not connected."),
         Job("pictures", "Channel pictures", "Fetches missing channel pictures and refreshes ones older than 30 days.",
             _pictures, every_s=24 * HOUR, stoppable=True),
+        Job("loudness", "Volume levels",
+            "Measures how loud each new video is, so the TVs can even out the volume. The files are not changed.",
+            _loudness, every_s=10 * 60, stoppable=True),
         Job("ytdlp", "yt-dlp version", "Installs a newer yt-dlp when there is one, without a rebuild or a restart.",
             _ytdlp, every_s=24 * HOUR),
         Job("ai-suggest", "AI suggestions", "Asks the AI for channels to consider; they land in Add › Ideas.",

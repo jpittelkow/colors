@@ -93,7 +93,8 @@ fun PlayerScreen(nav: Nav, profile: Profile, itemId: Int, chain: Int) {
             .setSeekBackIncrementMs(SEEK_MS).setSeekForwardIncrementMs(SEEK_MS)
             .build()
     }
-    DisposableEffect(Unit) { onDispose { player.release() } }
+    val leveler = remember { Leveler(player) }
+    DisposableEffect(Unit) { onDispose { leveler.close(); player.release() } }
 
     // Keep the screen awake while a video plays, or the TV's screensaver comes up over it after its idle timeout
     // (10 min on the office Chromecast, 2026-11-24). Paused, the screensaver may come as usual.
@@ -117,6 +118,7 @@ fun PlayerScreen(nav: Nav, profile: Profile, itemId: Int, chain: Int) {
             nav.toast("The video didn't start. Try another one."); return@LaunchedEffect nav.back()
         }
         play = p; time = p.time
+        leveler.apply(p.audio)  // even out the volume before the first sound (ADR 0041)
         player.setMediaItem(MediaItem.fromUri(p.streamUrl))
         player.prepare()
         if (p.resumeS > 1) player.seekTo((p.resumeS * 1000).toLong())

@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 from ..curation import blocklist
 from ..db import Database
-from ..downloads import jobs, subscriptions
+from ..downloads import jobs, loudness, subscriptions
 from ..limits import clock
 from ..rules import pipeline
 from ..sources import plex
@@ -536,6 +536,7 @@ class SettingsIn(BaseModel):
     skip_categories: list[str] | None = None
     downloads_paused: bool | None = None
     storage_cap_gb: int | None = Field(default=None, ge=1, le=100000)
+    level_volume: bool | None = None
 
 
 @router.get("/settings")
@@ -559,6 +560,8 @@ def settings_get(request: Request) -> dict:
         "library_gb": round(size / 1e9, 1),
         "library_videos": used,
         "disk": disk,
+        "level_volume": loudness.is_on(db),
+        "loudness": loudness.counts(db),
     }
 
 
@@ -574,6 +577,8 @@ def settings_put(body: SettingsIn, request: Request) -> dict:
         db.set_setting("downloads_paused", "1" if body.downloads_paused else "0")
     if body.storage_cap_gb is not None:
         db.set_setting("storage_cap_gb", str(body.storage_cap_gb))
+    if body.level_volume is not None:
+        db.set_setting("level_volume", "1" if body.level_volume else "0")
     return settings_get(request)
 
 

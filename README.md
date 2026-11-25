@@ -20,6 +20,7 @@ the TV that a parent did not allow.
   one more video), end now, unlock.
 - Time-fit: when a limit runs, only videos that finish in the time left are offered.
 - SponsorBlock skips and your own skips, counted in time-fit.
+- Even out the volume: every video measured once, the TV turns it up or down and softens loud moments.
 - Watch history and weekly reports per child; downloads and background jobs with live progress.
 - Optional AI picks through OpenRouter (no child's name or birthday is ever sent).
 - Home Assistant API with its own key (status, lock everything, extra time, vacation mode).

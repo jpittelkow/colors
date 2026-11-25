@@ -52,6 +52,7 @@ Idea ids refer to [`../ideas.md`](../ideas.md).
 | [0038](0038-the-name-is-colors.md) | The app is called "colors" | Accepted | F1 |
 | [0039](0039-qr-codes-on-the-tv-open-the-parents-page.md) | QR codes on the TV open the parents' page | Accepted | F9 |
 | [0040](0040-spoken-lines-are-recorded-files.md) | The TV's spoken lines are recorded files in the kids app's voice | Accepted | F9 |
+| [0041](0041-even-out-the-volume.md) | Even out the volume: the server measures, the TV adjusts | Accepted | |
 
 ## Not decided yet
 

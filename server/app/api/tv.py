@@ -17,6 +17,7 @@ from ..ai import picks
 from .. import channel_pics
 from .extras import avatar_url
 from ..db import Database
+from ..downloads import loudness
 from ..limits import clock
 from ..rules import pipeline
 from ..security import new_pair_code, new_token, token_hash
@@ -340,6 +341,7 @@ def play(body: PlayIn, request: Request, device_id: int = Depends(device)) -> di
             or (ctx.lastone_item is None and clock.claim_lastone(c, body.profile_id, body.item_id))
         ):
             raise HTTPException(403, {"reason": "lastone", "message": "That was the last one.", "time": ctx.public()})
+        lufs = c.execute("SELECT loudness_lufs FROM items WHERE id = ?", (body.item_id,)).fetchone()[0]
         segments = [
             {"start_s": r["start_s"], "end_s": r["end_s"], "category": r["category"]}
             for r in c.execute(
@@ -368,6 +370,7 @@ def play(body: PlayIn, request: Request, device_id: int = Depends(device)) -> di
         "skip_segments": segments,
         "heartbeat_s": 15,
         "time": ctx.public(),
+        "audio": loudness.audio_for_play(_db(request), lufs),  # evening out the volume (ADR 0041); None = off
     }
 
 

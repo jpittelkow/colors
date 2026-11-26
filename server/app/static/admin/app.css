@@ -244,6 +244,25 @@ textarea.kt-input { min-height: 140px; padding: var(--space-3); resize: vertical
 /* Kids, Settings */
 .kids-grid { display: grid; gap: var(--space-4); }
 .kid-card .kt-list__value { font-size: 13px; white-space: nowrap; }
+/* What is in force for a boy, coloured, with its way out beside it. Red: he can't watch. Amber: counting down.
+   Green: unlocked. The buttons that start each state wear the same colour (2026-11-26). */
+.kid-state { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  border-radius: var(--radius-md); border-left: 6px solid; }
+.kid-state__text { flex: 1 1 180px; display: flex; flex-direction: column; gap: 2px; }
+.kid-state__text strong { font-size: 16px; }
+.kid-state__text span { color: var(--ink-muted); font-size: 14px; }
+.kid-state__exits { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.kid-state__exits .kt-btn:not(.kt-btn--go) { background: var(--surface-200); }
+.kid-state--bad { background: var(--bad-soft); border-color: var(--bad); }
+.kid-state--bad strong { color: var(--bad); }
+.kid-state--warn { background: var(--warn-soft); border-color: var(--warn); }
+.kid-state--warn strong { color: var(--warn); }
+.kid-state--ok { background: var(--ok-soft); border-color: var(--ok); }
+.kid-state--ok strong { color: var(--ok); }
+.kt-btn--go { background: var(--ok); color: var(--surface-200); }
+.kt-btn--stop { background: var(--bad); color: var(--surface-200); }
+.kt-btn--timer { background: var(--warn-soft); color: var(--warn); box-shadow: inset 0 0 0 1.5px var(--warn); }
+.kt-chip--timer { background: var(--warn-soft); border-color: var(--warn); color: var(--warn); }
 .settings-groups { display: flex; flex-direction: column; gap: var(--space-4); }
 .settings-group { display: flex; flex-direction: column; gap: var(--space-2); break-inside: avoid; }
 

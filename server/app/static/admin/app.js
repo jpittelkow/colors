@@ -1142,15 +1142,34 @@ async function viewVideo(id) {
 function kidCard({ profile: p, time: t, reason, playing }, redraw, { link = true } = {}) {
   const act = (action, minutes) => run(async () => {
     await api(`/kids/${p.id}/${action}`, { method: "POST", body: { minutes: minutes || 0 } });
-    toast({ extra: `+${minutes} min for ${p.name}`, limit: `${minutes} min limit started for ${p.name}`, lastone: "Last one, then it stops", lock: `Stopped for ${p.name}`, unlock: `Unlocked for ${p.name} until tomorrow`, "clear-limit": "Limit cleared" }[action] || "Done");
+    toast({ extra: `+${minutes} min for ${p.name}`, limit: `${minutes} min timer started for ${p.name}`, lastone: "Last one, then it stops", lock: `Stopped for ${p.name}`,
+      unlock: `Unlocked for ${p.name} until tomorrow`, "clear-limit": "Timer cancelled", "cancel-lastone": "Last one cancelled",
+      resume: `${p.name}'s usual limits apply again`, "end-unlock": `${p.name}'s usual limits apply again` }[action] || "Done");
     redraw();
   });
-  const leftLine = t.limited
+  // What is in force right now, each in its own colour with the button that undoes it (2026-11-26: the state and
+  // the way out weren't obvious). Red: he can't watch. Amber: a timer or "last one" is counting down. Green: unlocked.
+  const exit = (label, action, cls = "") => h("button", { class: "kt-btn kt-btn--sm " + cls, type: "button", onclick: () => act(action, action === "extra" ? 10 : 0) }, label);
+  const states = [];
+  if (t.stopped) states.push(["bad", "Stopped", "Ended with End now. Nothing plays until tomorrow.",
+    [exit("Undo End now", "resume"), exit("Unlock", "unlock", "kt-btn--go")]]);
+  else if (!t.open) states.push(["bad", reason || "Closed",
+    t.opens_at ? `Opens at ${t.opens_at}.` : `${minutesText(t.used_today_s)} watched today.`,
+    [t.timer_left_s != null ? exit("Cancel timer", "clear-limit") : exit("+10 min", "extra"), exit("Unlock", "unlock", "kt-btn--go")]]);
+  if (t.unlocked) states.push(["ok", "Unlocked", "No limits until tomorrow.", [exit("Back to usual limits", "end-unlock")]]);
+  if (t.open && t.timer_left_s != null) states.push(["warn", `Timer: ${minutesText(t.timer_left_s)} left`, "Then it stops, even mid-video.", [exit("Cancel timer", "clear-limit")]]);
+  if (t.lastone) states.push(["warn", "Last one", playing ? "Stops when this video ends." : "The next video he starts is his last.", [exit("Cancel last one", "cancel-lastone")]]);
+  const stateBox = states.length ? h("div", { class: "kt-stack", style: "gap:8px" }, states.map(([tone, title, sub, exits]) =>
+    h("div", { class: `kid-state kid-state--${tone}`, role: "status" },
+      h("span", { class: "kid-state__text" }, h("strong", {}, title), h("span", {}, sub)),
+      h("span", { class: "kid-state__exits" }, exits)))) : null;
+
+  const leftLine = t.open && t.limited
     ? h("div", { class: "kt-stack", style: "gap:6px" },
-        h("div", { class: "kt-row", style: "justify-content:space-between" }, h("strong", {}, t.open ? `${minutesText(t.left_s)} left` : (reason || "Closed")), h("span", { class: "kt-muted" }, t.open ? reason : `${minutesText(t.used_today_s)} watched today`)),
-        t.open ? h("div", { class: "kt-bar kt-bar--time" + (t.left_s < 300 ? " kt-bar--low" : ""), role: "progressbar", "aria-label": "Time left", "aria-valuenow": Math.round(t.left_s / 60), "aria-valuemin": 0 },
-          h("i", { style: `width:${Math.min(100, t.daily_s ? (t.left_s / t.daily_s) * 100 : 50)}%` })) : null)
-    : h("div", { class: "kt-muted" }, `${minutesText(t.used_today_s)} watched today · ${t.unlocked ? "unlocked until tomorrow" : "no limit running"}`);
+        h("div", { class: "kt-row", style: "justify-content:space-between" }, h("strong", {}, `${minutesText(t.left_s)} left`), h("span", { class: "kt-muted" }, reason)),
+        h("div", { class: "kt-bar kt-bar--time" + (t.left_s < 300 ? " kt-bar--low" : ""), role: "progressbar", "aria-label": "Time left", "aria-valuenow": Math.round(t.left_s / 60), "aria-valuemin": 0 },
+          h("i", { style: `width:${Math.min(100, t.daily_s ? (t.left_s / t.daily_s) * 100 : 50)}%` })))
+    : t.open ? h("div", { class: "kt-muted" }, `${minutesText(t.used_today_s)} watched today${t.unlocked ? "" : " · no limit running"}`) : null;
   const head = [profileAvatar(p, "kt-avatar--lg"),
     h("div", { class: "kt-video__body" }, h("div", { class: "kt-video__title", style: "font-size:18px" }, p.name), h("div", { class: "kt-muted" }, playing ? `Watching on ${playing.tv}` : "Not watching")),
     link ? h("span", { class: "kt-list__value", "aria-hidden": "true" }, "›") : null];
@@ -1159,14 +1178,15 @@ function kidCard({ profile: p, time: t, reason, playing }, redraw, { link = true
     playing ? h("div", { class: "kt-video" },
       thumb(playing.has_thumb ? `../api/admin/items/${playing.item_id}/thumb` : playing.thumb_url, { style: "width:120px", seen: playing.duration_s ? playing.last_position_s / playing.duration_s : 0 }),
       h("div", { class: "kt-video__body" }, h("div", { class: "kt-video__title" }, playing.title), h("div", { class: "kt-muted" }, `${mins(playing.last_position_s)} of ${mins(playing.duration_s)}${playing.last_state === "paused" ? " · paused" : ""}`))) : null,
+    stateBox,
     leftLine,
-    h("div", { class: "kt-row" },
-      t.open && !t.lastone ? h("button", { class: "kt-btn kt-btn--primary", type: "button", onclick: () => act("lastone") }, "Last one") : null,
-      t.lastone ? h("span", { class: "kt-tag kt-tag--warn" }, "Last one") : null,
+    t.open ? h("div", { class: "kt-row" },
+      t.lastone ? null : h("button", { class: "kt-btn kt-btn--timer", type: "button", onclick: () => act("lastone") }, "Last one"),
       h("button", { class: "kt-btn", type: "button", onclick: () => act("extra", 10) }, "+10 min"),
-      t.open ? h("button", { class: "kt-btn", type: "button", onclick: () => act("lock") }, "End now") : h("button", { class: "kt-btn", type: "button", onclick: () => act("unlock") }, "Unlock")),
-    h("div", { class: "kt-row" }, h("span", { class: "kt-muted" }, "Start a limit:"),
-      [5, 10, 15, 30, 45, 60].map((m) => h("button", { class: "kt-chip", type: "button", onclick: () => act("limit", m) }, `${m} min`))),
+      t.limited && !t.unlocked ? h("button", { class: "kt-btn kt-btn--go", type: "button", onclick: () => act("unlock") }, "Unlock") : null,
+      h("button", { class: "kt-btn kt-btn--stop", type: "button", onclick: () => act("lock") }, "End now")) : null,
+    h("div", { class: "kt-row" }, h("span", { class: "kt-muted" }, t.timer_left_s != null ? "New timer instead:" : "Start a timer:"),
+      [5, 10, 15, 30, 45, 60].map((m) => h("button", { class: "kt-chip kt-chip--timer", type: "button", onclick: () => act("limit", m) }, `${m} min`))),
     // His own page, said plainly: the small "›" on the name was easy to miss (the owner, 2026-11-23).
     link ? h("a", { class: "kt-btn kt-btn--wide", href: `#kid/${p.id}` }, `${p.name}'s history, week and limits →`) : null);
 }
@@ -2479,7 +2499,8 @@ async function viewHomeAssistant() {
     h("h2", { class: "kt-label" }, "Addresses"),
     h("div", { class: "kt-list" },
       row("Status (sensor)", null, `GET ${base}/status`),
-      row("Add minutes, limit, last one, end now, unlock", null, `POST ${base}/profiles/<id>/extra|limit|lastone|lock|unlock`),
+      row("Add minutes, timer, last one, end now, unlock", null, `POST ${base}/profiles/<id>/extra|limit|lastone|lock|unlock`),
+      row("Undo them", null, `POST ${base}/profiles/<id>/clear-limit|cancel-lastone|resume|end-unlock`),
       row("Everything off", null, `POST ${base}/all/lock`),
       row("Vacation mode", null, `POST ${base}/vacation  {"on": true}`)));
 }
@@ -2511,7 +2532,7 @@ const WIDE = new Set(["library", "find", "approve", "kids", "settings", "downloa
 
 async function route() {
   clearInterval(timer);
-  let [name, a, b] = (location.hash.slice(1) || (profiles.length ? "library" : "profiles")).split("/");
+  let [name, a, b] = (location.hash.slice(1) || (profiles.length ? "kids" : "profiles")).split("/");
   name = { inbox: "approve", more: "settings" }[name] || name;
   for (const el of nav.querySelectorAll("a")) el.toggleAttribute("aria-current", el.dataset.tab === (TAB_OF[name] || "settings"));
   for (const el of nav.querySelectorAll("a[aria-current]")) el.setAttribute("aria-current", "page");

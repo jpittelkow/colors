@@ -68,6 +68,8 @@ class Context:
     opens_at: str = ""               # closed hours: the time they end, for the TV's "Good night" screen
     unlocked: bool = False           # a parent pressed Unlock today: no limits until tomorrow (or End now)
     hard_stop: bool = False          # a parent ended it: stop even mid-video
+    stopped: bool = False            # End now is in force (a parent, or "last one" finishing)
+    timer_left_s: float | None = None  # a timed limit a parent started is running (None = none)
     limits: dict = field(default_factory=dict)
 
     def public(self) -> dict:
@@ -82,6 +84,8 @@ class Context:
             "lastone": self.lastone,
             "opens_at": self.opens_at if self.reason == "Closed now" else "",
             "unlocked": self.unlocked,
+            "stopped": self.stopped,
+            "timer_left_s": None if self.timer_left_s is None else max(0, round(self.timer_left_s)),
         }
 
 
@@ -141,6 +145,7 @@ def context(conn: sqlite3.Connection, profile_id: int, now: float | None = None)
     for o in ovr:
         if o["kind"] == "oneoff" and o["ends_at"]:
             left = o["ends_at"] - now
+            ctx.timer_left_s = left
             candidates.append((left, "Time's up" if left <= 0 else "Time limit", max(0, -left)))
 
     # Closed hours (wall clock).
@@ -159,7 +164,7 @@ def context(conn: sqlite3.Connection, profile_id: int, now: float | None = None)
     # A parent pressed "end now".
     for o in ovr:
         if o["kind"] == "lock" and (o["ends_at"] is None or o["ends_at"] > now) and not unlocked:
-            ctx.open, ctx.reason, ctx.hard_stop = False, "Stopped by a parent", True
+            ctx.open, ctx.reason, ctx.hard_stop, ctx.stopped = False, "Stopped by a parent", True, True
             ctx.left_s, ctx.limited = 0, True
             return ctx
 
@@ -237,7 +242,7 @@ def add_override(conn: sqlite3.Connection, profile_id: int, kind: str, *, minute
     ).lastrowid
 
 
-ACTIONS = ("extra", "limit", "clear-limit", "lastone", "lock", "unlock")
+ACTIONS = ("extra", "limit", "clear-limit", "lastone", "cancel-lastone", "lock", "resume", "unlock", "end-unlock")
 
 
 def apply_action(conn: sqlite3.Connection, profile_id: int, action: str, minutes: float = 0) -> None:
@@ -248,6 +253,13 @@ def apply_action(conn: sqlite3.Connection, profile_id: int, action: str, minutes
         add_override(conn, profile_id, "oneoff", minutes=minutes or 30)
     elif action == "clear-limit":
         clear_today(conn, profile_id, ("oneoff",))
+    # The ways back out of the other states, so each one the page shows has its own undo (2026-11-26).
+    elif action == "cancel-lastone":
+        clear_today(conn, profile_id, ("lastone",))
+    elif action == "resume":  # undo End now: his usual limits apply again (not Unlock, which lifts them)
+        clear_today(conn, profile_id, ("lock",))
+    elif action == "end-unlock":  # undo Unlock: back to his usual limits (not End now, which stops him)
+        clear_today(conn, profile_id, ("unlock",))
     elif action == "lastone":
         oid = add_override(conn, profile_id, "lastone")
         # Watching right now: this video is the last one. Otherwise the next one started is.

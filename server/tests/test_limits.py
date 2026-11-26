@@ -209,3 +209,26 @@ def test_the_stamp_changes_when_a_parent_starts_a_limit(env):
     assert after_limit != first
     env.client.post(f"/api/admin/kids/{pid}/extra", json={"minutes": 10})
     assert st() != after_limit
+
+
+def test_each_state_has_its_own_way_out(env):
+    """2026-11-26: the Kids page shows what is in force and the button that undoes it, so each needs an action."""
+    pid = env.client.post("/api/admin/profiles", json={"name": "Sam"}).json()["id"]
+    env.client.put(f"/api/admin/limits/{pid}", json={"weekday_min": 30, "weekend_min": 30})
+    time_of = lambda: next(k for k in env.client.get("/api/admin/kids").json() if k["profile"]["id"] == pid)["time"]
+    act = lambda a, m=0: env.client.post(f"/api/admin/kids/{pid}/{a}", json={"minutes": m}).status_code
+
+    assert act("lock") == 200 and time_of()["stopped"] is True and time_of()["open"] is False
+    assert act("resume") == 200  # Undo End now: back to his usual limits, not unlocked
+    t = time_of()
+    assert t["stopped"] is False and t["open"] is True and t["unlocked"] is False and t["limited"] is True
+
+    assert act("unlock") == 200 and time_of()["unlocked"] is True and time_of()["limited"] is False
+    assert act("end-unlock") == 200 and time_of()["unlocked"] is False and time_of()["limited"] is True
+
+    assert act("limit", 15) == 200 and 14 * 60 <= time_of()["timer_left_s"] <= 15 * 60
+    assert act("clear-limit") == 200 and time_of()["timer_left_s"] is None
+
+    assert act("lastone") == 200 and time_of()["lastone"] is True
+    assert act("cancel-lastone") == 200 and time_of()["lastone"] is False
+    assert act("nonsense") == 404

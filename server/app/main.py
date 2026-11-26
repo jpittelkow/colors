@@ -1,6 +1,7 @@
 """One process: the admin API and page, the TV API, streaming and the download worker (ADR 0003)."""
 from __future__ import annotations
 
+import logging
 import os
 import re
 from contextlib import asynccontextmanager
@@ -61,8 +62,7 @@ def create_app(cfg: Config | None = None, downloader=None) -> FastAPI:
     app.state.cfg = cfg
     app.state.db = db
     app.state.signer = Signer(db)
-    secret_file = cfg.data_dir / "proxy-secret"  # ADR 0043; read once, so a change needs a restart
-    app.state.proxy_secret = secret_file.read_text(encoding="utf-8").strip() if secret_file.is_file() else ""
+    app.state.proxy_secret = _read_proxy_secret(cfg.data_dir / "proxy-secret")
     app.state.downloader = downloader or YtDlp(cfg.library_dir, cfg.data_dir / "cookies.txt", cfg.ffmpeg_dir, cfg.pot_url)
     app.state.pics = ChannelPics(db, app.state.downloader, cfg.data_dir)
     app.state.registry = Registry(db, app.state, background.all_jobs())
@@ -114,6 +114,15 @@ def create_app(cfg: Config | None = None, downloader=None) -> FastAPI:
     app.mount("/avatars", StaticFiles(directory=STATIC_DIR / "avatars"), name="avatars")
     app.mount("/admin", FreshStaticFiles(directory=STATIC_DIR / "admin", html=True), name="admin")
     return app
+
+
+def _read_proxy_secret(f: Path) -> str:
+    """ADR 0043. Read once at start-up. An unreadable file means no proxy is trusted, not a server that won't start."""
+    try:
+        return f.read_text(encoding="utf-8").strip() if f.is_file() else ""
+    except OSError as e:
+        logging.getLogger("kidtube").warning("Can't read %s (%s): the Home Assistant panel will ask for the password", f, e)
+        return ""
 
 
 def app_from_env() -> FastAPI:

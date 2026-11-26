@@ -82,3 +82,25 @@ def test_no_proxy_secret_file_means_no_header_is_trusted(env):
     env.client.cookies.clear()
     assert env.client.get("/api/admin/profiles", headers={"X-Kidtube-Proxy": ""}).status_code == 401
     assert env.client.get("/api/admin/profiles", headers={"X-Kidtube-Proxy": "anything"}).status_code == 401
+
+
+def test_an_unreadable_proxy_secret_does_not_stop_the_server(tmp_path, monkeypatch):
+    """2026-11-26: a root-owned 600 proxy-secret crashed start-up in the container (it runs as nobody)."""
+    from pathlib import Path
+
+    from app.config import Config
+    from app.main import create_app
+
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "proxy-secret").write_text("x", encoding="utf-8")
+    real = Path.read_text
+
+    def deny(self, *a, **k):
+        if self.name == "proxy-secret":
+            raise PermissionError(13, "Permission denied")
+        return real(self, *a, **k)
+
+    monkeypatch.setattr(Path, "read_text", deny)
+    app = create_app(Config(data_dir=data, library_dir=tmp_path / "lib", run_worker=False))
+    assert app.state.proxy_secret == ""

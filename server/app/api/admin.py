@@ -1,6 +1,7 @@
 """The parents' API, behind the admin password (ADR 0018, ADR 0025)."""
 from __future__ import annotations
 
+import hmac
 import logging
 import time
 
@@ -18,6 +19,7 @@ log = logging.getLogger("kidtube.admin")
 
 COOKIE = "kt_admin"
 SESSION_S = 30 * 24 * 3600
+PROXY_HEADER = "x-kidtube-proxy"  # sent by a trusted proxy that did its own login, e.g. Home Assistant (ADR 0043)
 
 router = APIRouter(prefix="/api/admin")
 
@@ -26,9 +28,17 @@ def _db(request: Request) -> Database:
     return request.app.state.db
 
 
+def _proxy_trusted(request: Request) -> bool:
+    """True when the request carries the secret from <data>/proxy-secret: it came through a proxy that already
+    signed the parent in (ADR 0043). No file, no trust."""
+    secret = request.app.state.proxy_secret
+    got = request.headers.get(PROXY_HEADER, "")
+    return bool(secret and got and hmac.compare_digest(secret.encode(), got.encode()))
+
+
 def _authed(request: Request) -> bool:
     db: Database = request.app.state.db
-    if db.get_setting("admin_password_off") == "1":
+    if db.get_setting("admin_password_off") == "1" or _proxy_trusted(request):
         return True
     token = request.cookies.get(COOKIE)
     claims = request.app.state.signer.read(token) if token else None

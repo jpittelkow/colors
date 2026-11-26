@@ -61,6 +61,8 @@ def create_app(cfg: Config | None = None, downloader=None) -> FastAPI:
     app.state.cfg = cfg
     app.state.db = db
     app.state.signer = Signer(db)
+    secret_file = cfg.data_dir / "proxy-secret"  # ADR 0043; read once, so a change needs a restart
+    app.state.proxy_secret = secret_file.read_text(encoding="utf-8").strip() if secret_file.is_file() else ""
     app.state.downloader = downloader or YtDlp(cfg.library_dir, cfg.data_dir / "cookies.txt", cfg.ffmpeg_dir, cfg.pot_url)
     app.state.pics = ChannelPics(db, app.state.downloader, cfg.data_dir)
     app.state.registry = Registry(db, app.state, background.all_jobs())

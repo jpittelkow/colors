@@ -57,3 +57,28 @@ def test_stream_needs_the_started_item_and_heartbeats_once_over(env):
     with env.db.conn() as c:  # the TV stopped sending heartbeats
         c.execute("UPDATE devices SET last_heartbeat = ?", (_t.time() - 300,))
     assert player.get(b["stream_url"], headers={"Range": "bytes=0-9"}).status_code == 403
+
+
+def test_a_trusted_proxy_secret_signs_the_parent_in(tmp_path):
+    """Home Assistant's ingress panel signs the parent in and sends <data>/proxy-secret as a header (ADR 0043)."""
+    from fastapi.testclient import TestClient
+
+    from app.config import Config
+    from app.main import create_app
+
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "proxy-secret").write_text("s3cret-from-ha\n", encoding="utf-8")
+    app = create_app(Config(data_dir=data, library_dir=tmp_path / "lib", run_worker=False))
+    c = TestClient(app)
+    assert c.post("/api/admin/auth/setup", json={"password": "secret-pw"}).status_code == 200
+    c.cookies.clear()
+    assert c.get("/api/admin/profiles").status_code == 401
+    assert c.get("/api/admin/profiles", headers={"X-Kidtube-Proxy": "wrong"}).status_code == 401
+    assert c.get("/api/admin/profiles", headers={"X-Kidtube-Proxy": "s3cret-from-ha"}).status_code == 200
+
+
+def test_no_proxy_secret_file_means_no_header_is_trusted(env):
+    env.client.cookies.clear()
+    assert env.client.get("/api/admin/profiles", headers={"X-Kidtube-Proxy": ""}).status_code == 401
+    assert env.client.get("/api/admin/profiles", headers={"X-Kidtube-Proxy": "anything"}).status_code == 401

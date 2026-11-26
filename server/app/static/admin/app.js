@@ -1275,9 +1275,15 @@ async function viewLimits(pid) {
   const f = {
     weekday_min: num("weekday", l.weekday_min), weekend_min: num("weekend", l.weekend_min), session_min: num("session", l.session_min),
     break_min: num("break", l.break_min, "60"), closed_from: time("cfrom", l.closed_from), closed_to: time("cto", l.closed_to),
-    grace_min: num("grace", l.grace_min, "2"), autoplay_n: num("autoplay", l.autoplay_n, "2"),
+    grace_min: num("grace", l.grace_min, "2"), autoplay_n: num("autoplay", l.autoplay_n > 1 ? l.autoplay_n : 2, "2"),
   };
+  f.autoplay_n.min = 2;
   let timefit = !!l.timefit, show_timer = !!l.show_timer;
+  // Autoplay is a switch; the count shows only when it's on. Off is stored as 0 (the TV plays the next video only
+  // while chain + 1 < autoplay_n, so 0 and 1 both mean off; 2026-11-25: the bare number hid that).
+  let autoplay = (l.autoplay_n ?? 2) > 1;
+  const autoplayRow = row(h("label", { for: "autoplay" }, "Stop after, videos in a row"), f.autoplay_n, "Counting the one he picked");
+  autoplayRow.style.display = autoplay ? "" : "none";
   const val = (x) => (x.value === "" ? null : +x.value);
   screen(`${p.name}'s limits`, { back: `kid/${pid}` },
     h("h2", { class: "kt-label" }, "Time a day"),
@@ -1296,13 +1302,19 @@ async function viewLimits(pid) {
     h("div", { class: "kt-list" },
       row("Only show videos that finish in time", switchBtn(timefit, "Only show videos that finish in time", (v) => (timefit = v)), "The choice shrinks as time runs down"),
       row(h("label", { for: "grace" }, "May run over by, minutes"), f.grace_min),
-      row("Timer on the TV", switchBtn(show_timer, "Timer on the TV", (v) => (show_timer = v))),
-      row(h("label", { for: "autoplay" }, "Autoplay, then stop after"), f.autoplay_n, "Videos in a row")),
+      row("Timer on the TV", switchBtn(show_timer, "Timer on the TV", (v) => (show_timer = v)))),
+    h("h2", { class: "kt-label" }, "After a video"),
+    h("div", { class: "kt-list" },
+      row("Play the next video by itself", switchBtn(autoplay, "Play the next video by itself", (v) => {
+        autoplay = v;
+        autoplayRow.style.display = v ? "" : "none";
+      }), "Off: back to the home screen after every video"),
+      autoplayRow),
     h("button", { class: "kt-btn kt-btn--primary kt-btn--wide", type: "button", onclick: () => run(async () => {
       await api(`/limits/${pid}`, { method: "PUT", body: {
         weekday_min: val(f.weekday_min), weekend_min: val(f.weekend_min), session_min: val(f.session_min),
         break_min: val(f.break_min) ?? 60, closed_from: f.closed_from.value || null, closed_to: f.closed_to.value || null,
-        timefit, grace_min: val(f.grace_min) ?? 2, show_timer, autoplay_n: val(f.autoplay_n) ?? 2,
+        timefit, grace_min: val(f.grace_min) ?? 2, show_timer, autoplay_n: autoplay ? Math.max(2, val(f.autoplay_n) ?? 2) : 0,
       } });
       toast("Saved");
       go(`kid/${pid}`);

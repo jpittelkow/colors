@@ -1,8 +1,8 @@
 {
   "name": "colors",
   "short_name": "colors",
-  "start_url": "/admin/",
-  "scope": "/admin/",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#f3f5f7",
   "theme_color": "#3346c9",

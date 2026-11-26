@@ -82,7 +82,7 @@ def create_app(cfg: Config | None = None, downloader=None) -> FastAPI:
 
     @app.get("/")
     def root() -> RedirectResponse:
-        return RedirectResponse("/admin/")
+        return RedirectResponse("admin/")  # relative: also right under a path prefix
 
     @app.get("/avatars/custom/{name}")
     def custom_avatar(name: str, request: Request) -> FileResponse:

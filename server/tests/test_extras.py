@@ -448,3 +448,16 @@ def test_library_videos_can_come_a_to_z(env):
     by = lambda order: [r["title"] for r in env.client.get("/api/admin/items", params={"approval": "approved", "order": order}).json()]
     assert by("title") == ["Video a", "Video b", "Video c"]
     assert by("added") == ["Video b", "Video a", "Video c"]  # newest first, as before
+
+
+def test_parents_page_works_under_a_path_prefix(env):
+    """Served as a Home Assistant ingress panel (/api/ingress/colors/...), absolute URLs went to HA's root (2026-11-26).
+    The root redirect and every URL the page asks for must be relative."""
+    import re
+    from pathlib import Path
+
+    r = env.client.get("/", follow_redirects=False)
+    assert r.headers["location"] == "admin/"
+    js = (Path(__file__).resolve().parents[1] / "app" / "static" / "admin" / "app.js").read_text(encoding="utf-8")
+    assert not re.search(r"""(fetch\(|src: )\s*[\"'`]/(?!/)""", js)
+    assert not re.search(r"""[\"'`]/api/""", js)

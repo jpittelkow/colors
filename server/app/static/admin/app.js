@@ -47,8 +47,12 @@ function toast(text) {
   setTimeout(() => t.remove(), 3500);
 }
 
+// The page sits at <base>/admin/, so the API is one level up. Relative, so it also works under a path prefix
+// such as a Home Assistant ingress panel. Server-made URLs like "/avatars/x.svg" go through rel() for the same reason.
+const rel = (u) => (typeof u === "string" && u.startsWith("/") && !u.startsWith("//") ? ".." + u : u);
+
 async function api(path, { method = "GET", body } = {}) {
-  const res = await fetch("/api/admin" + path, {
+  const res = await fetch("../api/admin" + path, {
     method,
     headers: body !== undefined ? { "Content-Type": "application/json" } : {},
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -123,7 +127,7 @@ function busy(btn, on = true) { if (btn) on ? btn.setAttribute("aria-busy", "tru
 const isChannelId = (x) => /^[A-Za-z0-9_-]{3,64}$/.test(x || "");
 function chanAvatar(channelId, fallbackUrl, title, cls = "") {
   const el = h("span", { class: `kt-avatar kt-avatar--plain ${cls}`, "aria-hidden": "true" });
-  const tries = [isChannelId(channelId) ? `/api/admin/channel-pictures/${encodeURIComponent(channelId)}` : null, fallbackUrl].filter(Boolean);
+  const tries = [isChannelId(channelId) ? `../api/admin/channel-pictures/${encodeURIComponent(channelId)}` : null, fallbackUrl].filter(Boolean);
   const next = () => {
     const src = tries.shift();
     if (!src) return fill(el, (title || "?").slice(0, 1).toUpperCase());
@@ -148,7 +152,7 @@ function watchPictures(root) {
     const r = await api("/channel-pictures?ids=" + left.join(",")).catch(() => ({ ready: [] }));
     for (const id of r.ready) {
       for (const el of root.querySelectorAll(`[data-cid="${id}"]`)) {
-        const img = h("img", { src: `/api/admin/channel-pictures/${id}`, alt: "" });
+        const img = h("img", { src: `../api/admin/channel-pictures/${id}`, alt: "" });
         img.onload = () => fill(el, img);
         delete el.dataset.cid;
       }
@@ -158,17 +162,17 @@ function watchPictures(root) {
 }
 function profileAvatar(p, cls = "") {
   const color = p.avatar_color ? ` av--${p.avatar_color}` : "";
-  if (p.avatar_url) return h("span", { class: `kt-avatar av${color} ${cls}`, "aria-hidden": "true" }, h("img", { src: p.avatar_url, alt: "" }));
+  if (p.avatar_url) return h("span", { class: `kt-avatar av${color} ${cls}`, "aria-hidden": "true" }, h("img", { src: rel(p.avatar_url), alt: "" }));
   return h("span", { class: `kt-avatar${color} ${cls}`, "aria-hidden": "true" }, (p.name || "?").slice(0, 1).toUpperCase());
 }
 
 function itemThumb(it) {
-  return it.has_thumb ? `/api/admin/items/${it.id}/thumb` : (it.thumb_url || "");
+  return it.has_thumb ? `../api/admin/items/${it.id}/thumb` : (it.thumb_url || "");
 }
 
 function thumb(src, opts = {}) {
   return h("div", { class: "kt-thumb", style: opts.style, onclick: opts.onclick },
-    src ? h("img", { src, alt: "", loading: "lazy" }) : null,
+    src ? h("img", { src: rel(src), alt: "", loading: "lazy" }) : null,
     opts.time ? h("span", { class: "kt-thumb__time" }, mins(opts.time)) : null,
     opts.seen ? h("span", { class: "kt-thumb__seen" }, h("i", { style: `width:${Math.round(opts.seen * 100)}%` })) : null);
 }
@@ -1014,7 +1018,7 @@ async function viewChannel(id, tab = "library") {
       local ? h("a", { href: `#channel/${id}/youtube`, "aria-current": tab === "youtube" ? "page" : null }, "Not in library") : null),
     tab === "youtube" ? youtubeTab(id, () => pids) : shown.length ? h("div", { class: "kt-grid" }, shown.slice((chanPage.page - 1) * PAGE, chanPage.page * PAGE).map((it) =>
       h("a", { class: "kt-video kt-video--big linkish", href: `#video/${it.id}` },
-        thumb(it.has_thumb ? `/api/admin/items/${it.id}/thumb` : it.thumb_url, { time: it.duration_s }),
+        thumb(it.has_thumb ? `../api/admin/items/${it.id}/thumb` : it.thumb_url, { time: it.duration_s }),
         h("div", { class: "kt-video__title" }, it.title),
         it.status !== "ready" ? h("span", { class: "kt-tag" + (it.status === "failed" ? " kt-tag--bad" : ""), style: "align-self:flex-start" }, it.play_note || (it.status === "failed" ? "Download failed" : "Downloading")) : null)))
       : h("div", { class: "empty" }, tab === "waiting" ? "Nothing waiting." : sub ? "No approved videos yet. New ones will show up here." : "No approved videos yet."),
@@ -1084,7 +1088,7 @@ async function viewVideo(id) {
   screen("Video", { back: "library", action: it.source === "local" && it.external_id ? h("button", { class: "kt-btn kt-btn--quiet", type: "button", onclick: () => fill(prev, preview(it.external_id)) }, "Preview") : null },
     prev,
     h("div", { class: "kt-video kt-video--big" },
-      h("div", { class: "kt-thumb" }, (it.has_thumb || it.thumb_url) ? h("img", { src: it.has_thumb ? `/api/admin/items/${it.id}/thumb` : it.thumb_url, alt: "" }) : null, h("span", { class: "kt-thumb__time" }, mins(it.duration_s))),
+      h("div", { class: "kt-thumb" }, (it.has_thumb || it.thumb_url) ? h("img", { src: it.has_thumb ? `../api/admin/items/${it.id}/thumb` : it.thumb_url, alt: "" }) : null, h("span", { class: "kt-thumb__time" }, mins(it.duration_s))),
       h("div", { class: "kt-video__meta" },
         avatar(it.container_thumb, it.container_title, "kt-avatar--plain"),
         h("div", { class: "kt-video__body" },
@@ -1153,7 +1157,7 @@ function kidCard({ profile: p, time: t, reason, playing }, redraw, { link = true
   return h("div", { class: "panel kid-card" },
     link ? h("a", { class: "kt-channel linkish", href: `#kid/${p.id}` }, head) : h("div", { class: "kt-channel" }, head),
     playing ? h("div", { class: "kt-video" },
-      thumb(playing.has_thumb ? `/api/admin/items/${playing.item_id}/thumb` : playing.thumb_url, { style: "width:120px", seen: playing.duration_s ? playing.last_position_s / playing.duration_s : 0 }),
+      thumb(playing.has_thumb ? `../api/admin/items/${playing.item_id}/thumb` : playing.thumb_url, { style: "width:120px", seen: playing.duration_s ? playing.last_position_s / playing.duration_s : 0 }),
       h("div", { class: "kt-video__body" }, h("div", { class: "kt-video__title" }, playing.title), h("div", { class: "kt-muted" }, `${mins(playing.last_position_s)} of ${mins(playing.duration_s)}${playing.last_state === "paused" ? " · paused" : ""}`))) : null,
     leftLine,
     h("div", { class: "kt-row" },
@@ -1867,7 +1871,7 @@ const plexState = { title: "", items: null, filter: "", pick: null };
 const plexPoster = (rk, title, cls = "") => {
   const el = h("div", { class: "poster " + cls });
   if (/^\d+$/.test(String(rk || ""))) {
-    const img = h("img", { src: `/api/admin/plex/poster/${rk}`, alt: "", loading: "lazy" });
+    const img = h("img", { src: `../api/admin/plex/poster/${rk}`, alt: "", loading: "lazy" });
     img.onerror = () => fill(el, h("span", { class: "poster__letter" }, (title || "?").slice(0, 1)));
     fill(el, img);
   } else fill(el, h("span", { class: "poster__letter" }, (title || "?").slice(0, 1)));
@@ -2019,7 +2023,7 @@ async function viewProfile(id) {
   file.addEventListener("change", () => run(async () => {
     const f = file.files[0];
     if (!f) return;
-    const res = await fetch(`/api/admin/profiles/${p.id}/avatar-image`, { method: "POST", headers: { "Content-Type": f.type }, body: f });
+    const res = await fetch(`../api/admin/profiles/${p.id}/avatar-image`, { method: "POST", headers: { "Content-Type": f.type }, body: f });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Upload failed.");
     await api(`/profiles/${p.id}`, { method: "PATCH", body: { avatar_color: color } });
     toast("Picture saved");

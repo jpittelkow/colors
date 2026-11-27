@@ -4,6 +4,12 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.speech.RecognizerIntent
+import androidx.compose.ui.platform.LocalContext
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -241,18 +247,43 @@ fun ShelfScreen(nav: Nav, profile: Profile, kind: String) {
 // ---- Search: this child's own library only ------------------------------------------------------------------------
 
 @Composable
-fun SearchScreen(nav: Nav, profile: Profile) {
+fun SearchScreen(nav: Nav, profile: Profile, voice: Boolean = false, query0: String = "") {
     val s = LocalScale.current
     // Back from a video started here: the same search, the same results, that video focused (2026-11-27).
-    // Opened from the menu, it starts empty.
+    // Opened from the menu, it starts empty; from the system's search, with its words.
     val back = remember { SearchReturn.take(profile.id) }
-    var field by remember { mutableStateOf(TextFieldValue(back?.query ?: "", TextRange(back?.query?.length ?: 0))) }
+    val start = back?.query ?: query0
+    var field by remember { mutableStateOf(TextFieldValue(start, TextRange(start.length))) }
     val query = field.text
     var results by remember { mutableStateOf(back?.results) }
     var col by remember { mutableIntStateOf((back?.index ?: 0) % 3) }
     val box = remember { FocusRequester() }
     val firstResult = remember { FocusRequester() }
     val played = remember { FocusRequester() }
+    val mic = remember { FocusRequester() }
+
+    // Voice: the TV's own speech recognizer (Google's, the same one as the remote's mic) turns what he says into
+    // words, which fill the box; the search runs as usual, and the first result gets the focus (2026-11-27).
+    var heard by remember { mutableStateOf(query0.isNotEmpty()) }
+    val listen = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+        val said = r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.trim()?.take(60)
+        if (!said.isNullOrEmpty()) { field = TextFieldValue(said, TextRange(said.length)); heard = true }
+    }
+    val ctx = LocalContext.current
+    fun startListening() = try {
+        val ask = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            .putExtra(RecognizerIntent.EXTRA_PROMPT, "Say what you want to watch")
+            .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+        // Some TVs have two recognizers, and Android then asks which one, a choice a child can't make (Chromecast
+        // HD, 2026-11-27). Take Google TV's own (the one the remote's mic uses), else the first there is.
+        val all = ctx.packageManager.queryIntentActivities(ask, 0)
+        (all.firstOrNull { it.activityInfo.packageName == "com.google.android.katniss" } ?: all.firstOrNull())
+            ?.activityInfo?.let { ask.setClassName(it.packageName, it.name) }
+        listen.launch(ask)
+    } catch (e: ActivityNotFoundException) {
+        nav.toast("This TV can't listen. Type it instead.")
+    }
     val grid = rememberLazyGridState(initialFirstVisibleItemIndex = back?.index?.let { it - it % 3 } ?: 0)
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = LocalFocusManager.current
@@ -262,6 +293,9 @@ fun SearchScreen(nav: Nav, profile: Profile) {
         if (query.isBlank()) { results = null; return@LaunchedEffect }
         delay(350)
         results = try { nav.api.search(query, profile.id) } catch (e: Exception) { emptyList() }
+    }
+    LaunchedEffect(results) {
+        if (heard && results != null) { heard = false; if (results!!.isNotEmpty()) { keyboard?.hide(); firstResult.soon() } }
     }
     MenuFrame(nav, profile, Menu.Search, menuWanted = col == 0, time = null) {
         Row(
@@ -285,6 +319,7 @@ fun SearchScreen(nav: Nav, profile: Profile) {
                                     if (results.isNullOrEmpty()) false else runCatching { firstResult.requestFocus() }.isSuccess
                                 }
                                 e.key == Key.DirectionLeft && field.selection.start == 0 -> focus.moveFocus(FocusDirection.Left)
+                                e.key == Key.DirectionRight && field.selection.end == field.text.length -> runCatching { mic.requestFocus() }.isSuccess
                                 else -> false
                             }
                         },
@@ -295,9 +330,17 @@ fun SearchScreen(nav: Nav, profile: Profile) {
                 )
             }
         }
+        // The mic, red like the play button: press it and say it.
+        Focusable({ startListening() }, Modifier.offset(x = s(84 + 1120 + 24), y = s(66)).focusRequester(mic).onFocusChanged { if (it.isFocused) col = 1 }) { focused ->
+            Box(
+                Modifier.size(s(96)).clip(CircleShape).background(C.Red)
+                    .border(if (focused) s(5) else s(3), if (focused) C.Plate else C.Plate.copy(alpha = .6f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Mic, 48, Color.White) }
+        }
         val r = results
         when {
-            r == null -> Empty("Type, or press the mic on the remote and say it.")
+            r == null -> Empty("Press the red mic and say it, or type.")
             r.isEmpty() -> Empty("Nothing found for “$query”.")
             else -> LazyVerticalGrid(
                 GridCells.Fixed(3), Modifier.fillMaxSize().padding(top = s(210)), state = grid,
@@ -313,7 +356,13 @@ fun SearchScreen(nav: Nav, profile: Profile) {
             }
         }
     }
-    LaunchedEffect(Unit) { if (back != null && !back.results.isNullOrEmpty()) played.soon() else box.soon() }
+    LaunchedEffect(Unit) {
+        when {
+            back != null && !back.results.isNullOrEmpty() -> played.soon()
+            voice -> { mic.soon(); startListening() }  // the remote's search key: listen at once
+            else -> box.soon()
+        }
+    }
 }
 
 /** The search a video was started from, kept for one return to the search screen. */

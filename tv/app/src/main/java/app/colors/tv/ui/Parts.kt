@@ -115,6 +115,7 @@ object Icons {
     const val New = "M12 2.8v5M12 16.2v5M2.8 12h5M16.2 12h5M5.5 5.5l3.3 3.3M15.2 15.2l3.3 3.3M5.5 18.5l3.3-3.3M15.2 8.8l3.3-3.3"
     const val Search = "M10.5 4a6.5 6.5 0 1 1 0 13a6.5 6.5 0 0 1 0 -13zM15.4 15.4L20 20"
     const val Restart = "M5 12a7 7 0 1 0 2.05-4.95M5 4v3.6h3.6"
+    const val Mic = "M12 3.5a3 3 0 0 1 3 3v5a3 3 0 0 1 -6 0v-5a3 3 0 0 1 3 -3zM6 11a6 6 0 0 0 12 0M12 17v3.5M8.5 20.5h7"
 }
 
 @Composable

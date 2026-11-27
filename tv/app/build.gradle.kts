@@ -27,8 +27,8 @@ android {
         // 30 = Android 11: the oldest TVs in the house are the office TCL and the SHIELD (ADR 0015).
         minSdk = 30
         targetSdk = 34
-        versionCode = 11
-        versionName = "0.5.1"
+        versionCode = 12
+        versionName = "0.5.2"
         // Where the server is, unless a parent typed another address on the TV (ADR 0018).
         buildConfigField("String", "DEFAULT_SERVER", "\"${local.getProperty("colors.server", "")}\"")
     }

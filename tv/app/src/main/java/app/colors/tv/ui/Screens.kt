@@ -81,7 +81,8 @@ sealed interface Screen {
     data class Channel(val profile: Profile, val containerId: Int) : Screen
     /** The menu's pages besides Home (Menu.kt). */
     data class Channels(val profile: Profile) : Screen
-    data class Search(val profile: Profile) : Screen
+    /** `voice`: start listening at once (the remote's search key); `query`: what to search for (system search). */
+    data class Search(val profile: Profile, val voice: Boolean = false, val query: String = "") : Screen
     data class Shelf(val profile: Profile, val kind: String) : Screen
     /** `chain`: videos autoplay has started in a row; `fromStart`: Watch again, so ignore the resume point. */
     data class Player(val profile: Profile, val itemId: Int, val chain: Int = 0, val fromStart: Boolean = false) : Screen

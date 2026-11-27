@@ -55,6 +55,7 @@ Idea ids refer to [`../ideas.md`](../ideas.md).
 | [0041](0041-even-out-the-volume.md) | Even out the volume: the server measures, the TV adjusts | Accepted | |
 | [0042](0042-channels-nobody-watches.md) | Channels nobody watches: a list that suggests, per child | Accepted | |
 | [0043](0043-trust-home-assistants-login.md) | Trust Home Assistant's login for the parents' page | Accepted | |
+| [0044](0044-a-screen-between-videos.md) | A screen between videos: watch again, up next in 5, more below | Proposed | |
 
 ## Not decided yet
 

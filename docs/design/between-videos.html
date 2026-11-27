@@ -1,0 +1,263 @@
+<meta charset="utf-8">
+<title>Between Videos</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Roboto:wght@400;500;700&display=swap">
+<style>
+/* Layout: the TV frame (1920x1080, scaled to fit) first, the rules it follows under it. The TV colours are the
+   app's own (docs/design/reference.md) and stay the same in both page themes; only the page around it changes. */
+:root {
+  --page: #f4f3f8; --page-ink: #1b1a24; --page-muted: #5d5b6b; --page-line: #dcdae6; --page-card: #ffffff; --page-accent: #3d2a99;
+  --tv-sky: #0f0f0f; --tv-hills: #7f00bf; --tv-ground: #2c2580; --tv-plate: #f1f1f1; --tv-onplate: #0f0f0f;
+  --tv-muted: #9f9ea6; --tv-red: #ff0033; --tv-sun: #ffc233; --tv-pill: #1a1a36; --tv-rail: #1a0059;
+  --f-play: "Fredoka", "Nunito", system-ui, sans-serif; --f-text: "Roboto", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --page: #121118; --page-ink: #eceaf4; --page-muted: #a4a1b5; --page-line: #2c2a38; --page-card: #1b1a24; --page-accent: #b4a6ff; color-scheme: dark; } }
+:root[data-theme="dark"] { --page: #121118; --page-ink: #eceaf4; --page-muted: #a4a1b5; --page-line: #2c2a38; --page-card: #1b1a24; --page-accent: #b4a6ff; color-scheme: dark; }
+
+[hidden] { display: none !important; }
+body { background: var(--page); color: var(--page-ink); font-family: var(--f-text); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 28px 56px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 20px; }
+header h1 { font-family: var(--f-play); font-weight: 600; font-size: 30px; margin: 0; text-wrap: balance; }
+header p { margin: 4px 0 0; color: var(--page-muted); max-width: 68ch; }
+
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.bar button { font: inherit; font-weight: 600; font-size: 14px; border: 1px solid var(--page-line); background: var(--page-card); color: var(--page-ink); border-radius: 999px; padding: 7px 14px; cursor: pointer; }
+.bar button[aria-pressed="true"] { background: var(--page-ink); color: var(--page); border-color: var(--page-ink); }
+.bar button:focus-visible { outline: 3px solid var(--page-accent); outline-offset: 2px; }
+.bar .hint { color: var(--page-muted); font-size: 13px; margin-left: auto; }
+
+/* The TV */
+.tv { position: relative; width: 100%; aspect-ratio: 16 / 9; max-width: 100%; border-radius: 14px; overflow: hidden; background: var(--tv-sky); box-shadow: 0 0 0 10px #050507, 0 18px 40px rgb(0 0 0 / .28); outline: none; }
+.tv:focus-visible { box-shadow: 0 0 0 10px #050507, 0 0 0 14px var(--page-accent); }
+.screen { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; color: var(--tv-plate); font-family: var(--f-text); }
+.scenery { position: absolute; inset: 0; background: var(--tv-sky); }
+.scenery .hills { position: absolute; left: 0; right: 0; top: 600px; height: 140px; background:
+  radial-gradient(260px 120px at 160px 120px, var(--tv-hills) 98%, transparent 100%),
+  radial-gradient(340px 140px at 620px 140px, var(--tv-hills) 98%, transparent 100%),
+  radial-gradient(300px 120px at 1120px 130px, var(--tv-hills) 98%, transparent 100%),
+  radial-gradient(360px 150px at 1640px 150px, var(--tv-hills) 98%, transparent 100%); }
+.scenery .ground { position: absolute; left: 0; right: 0; top: 720px; bottom: 0; background: var(--tv-ground); }
+.scenery .dim { position: absolute; inset: 0; background: rgb(5 5 8 / .55); }
+.logo { position: absolute; left: 1678px; top: 74px; font-family: var(--f-play); font-weight: 600; font-size: 46px; letter-spacing: -.5px; }
+.logo span:nth-child(1) { color: #ff5a4e; } .logo span:nth-child(2) { color: #ffb627; } .logo span:nth-child(3) { color: #5ccf78; }
+.logo span:nth-child(4) { color: #4fb3ff; } .logo span:nth-child(5) { color: #a98bff; } .logo span:nth-child(6) { color: #ff7ac3; }
+
+.f { outline: none; }
+.pill { position: absolute; height: 72px; padding: 0 30px 0 22px; border-radius: 36px; background: var(--tv-pill); color: var(--tv-plate); display: flex; align-items: center; gap: 14px; font-weight: 700; font-size: 28px; }
+.pill svg { width: 34px; height: 34px; stroke: currentColor; fill: none; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.pill.on { background: var(--tv-plate); color: var(--tv-onplate); }
+.back { left: 96px; top: 63px; }
+
+.label { position: absolute; font-weight: 700; font-size: 34px; letter-spacing: .5px; color: var(--tv-muted); }
+.label.on { color: var(--tv-plate); }
+
+.thumb { position: absolute; border-radius: 16px; overflow: hidden; background: #2a2a2a; }
+.thumb .len { position: absolute; right: 12px; bottom: 14px; background: rgb(0 0 0 / .62); color: #fff; font-weight: 500; font-size: 24px; padding: 0 8px; border-radius: 6px; font-variant-numeric: tabular-nums; }
+.thumb .seen { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; background: var(--tv-red); }
+
+/* You watched */
+.was-plate { position: absolute; left: 84px; top: 228px; width: 552px; height: 468px; border-radius: 28px; }
+.was-title { position: absolute; left: 96px; top: 542px; width: 528px; font-weight: 700; font-size: 34px; line-height: 48px; color: var(--tv-plate); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.again { left: 96px; top: 612px; }
+
+/* Up next */
+.next-plate { position: absolute; left: 828px; top: 168px; width: 1008px; height: 600px; border-radius: 32px; background: transparent; }
+.next-plate.on { background: var(--tv-plate); }
+.next-title { position: absolute; left: 840px; top: 646px; width: 984px; font-family: var(--f-play); font-weight: 600; font-size: 46px; line-height: 56px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--tv-plate); }
+.next-sub { position: absolute; left: 840px; top: 706px; font-size: 26px; color: var(--tv-muted); }
+.next-plate.on ~ .next-title { color: var(--tv-onplate); }
+.next-plate.on ~ .next-sub { color: #4a4950; }
+.go { position: absolute; left: calc(840px + 492px - 110px); top: calc(180px + 220px - 110px); width: 220px; height: 220px; }
+.go .disc { position: absolute; inset: 34px; border-radius: 50%; background: var(--tv-red); display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 24px rgb(0 0 0 / .45); }
+.go .disc svg { width: 64px; height: 64px; fill: #fff; margin-left: 8px; }
+.go .ring { position: absolute; inset: 0; transform: rotate(-90deg); }
+.go .ring circle { fill: none; stroke-width: 14; }
+.go .ring .track { stroke: rgb(255 255 255 / .28); }
+.go .ring .left { stroke: var(--tv-plate); stroke-linecap: round; }
+.go .num { position: absolute; left: 50%; top: -86px; transform: translateX(-50%); font-family: var(--f-play); font-weight: 700; font-size: 64px; line-height: 72px; min-width: 96px; text-align: center; color: var(--tv-onplate); background: var(--tv-sun); border-radius: 36px; padding: 0 22px; font-variant-numeric: tabular-nums; }
+.badge { position: absolute; left: 864px; top: 204px; height: 56px; padding: 0 22px; border-radius: 28px; background: rgb(0 0 0 / .66); color: #fff; font-weight: 700; font-size: 26px; display: flex; align-items: center; gap: 10px; }
+.badge i { width: 14px; height: 14px; border-radius: 50%; background: var(--tv-sun); }
+
+/* More to watch */
+.card-plate { position: absolute; width: 384px; height: 296px; border-radius: 24px; }
+.card-plate.on { background: var(--tv-plate); }
+.card-title { position: absolute; width: 360px; font-weight: 700; font-size: 26px; line-height: 34px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--tv-plate); }
+.card-plate.on + .thumb + .card-title { color: var(--tv-onplate); }
+
+.playing { position: absolute; inset: 0; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; font-family: var(--f-play); font-size: 54px; font-weight: 600; }
+.playing small { font-family: var(--f-text); font-size: 28px; color: var(--tv-muted); font-weight: 400; }
+
+/* The rules, under the TV */
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.note { background: var(--page-card); border: 1px solid var(--page-line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+.note h2 { font-size: 14px; letter-spacing: .4px; text-transform: uppercase; margin: 0 0 6px; color: var(--page-accent); }
+.note p { margin: 0; color: var(--page-muted); }
+.note b { color: var(--page-ink); }
+@media (prefers-reduced-motion: reduce) { .go .ring .left { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>The screen between videos</h1>
+    <p>Mockup for ADR 0044. Autoplay is on and a video just ended. The next one starts in 5 seconds unless someone presses a key. Click the TV, then use the arrow keys, Enter and Escape (Back) the way a remote would.</p>
+  </header>
+
+  <div class="bar" role="group" aria-label="Mockup state">
+    <button id="st-count" type="button" aria-pressed="true">Counting down</button>
+    <button id="st-stopped" type="button" aria-pressed="false">After a press</button>
+    <button id="restart" type="button">Start the countdown again</button>
+    <span class="hint" id="hint">No key: Up next plays at 0</span>
+  </div>
+
+  <div class="tv" id="tv" tabindex="0" aria-label="TV screen mockup. Press keys to try it.">
+    <div class="screen" id="screen">
+      <div class="scenery"><div class="hills"></div><div class="ground"></div><div class="dim"></div></div>
+      <div class="logo" aria-hidden="true"><span>c</span><span>o</span><span>l</span><span>o</span><span>r</span><span>s</span></div>
+
+      <div class="pill back f" data-f="back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>Back</div>
+
+      <div class="label" style="left:96px; top:150px">YOU WATCHED</div>
+      <div class="was-plate"></div>
+      <div class="thumb" id="was-thumb" style="left:96px; top:240px; width:528px; height:297px; opacity:.78"><div class="seen"></div><div class="len">7:12</div></div>
+      <div class="was-title">Paper Boats in the Rain</div>
+      <div class="pill again f" data-f="again"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v5h5"/></svg>Watch again</div>
+
+      <div class="label on" id="next-label" style="left:840px; top:110px">UP NEXT</div>
+      <div class="next-plate f" data-f="next"></div>
+      <div class="thumb" id="next-thumb" style="left:840px; top:180px; width:984px; height:440px"><div class="len">5:48</div></div>
+      <div class="badge" id="badge"><i></i><span id="badge-text">Plays by itself</span></div>
+      <div class="go" aria-hidden="true">
+        <svg class="ring" id="ring" viewBox="0 0 220 220"><circle class="track" cx="110" cy="110" r="100"/><circle class="left" id="left" cx="110" cy="110" r="100"/></svg>
+        <div class="disc"><svg viewBox="0 0 24 24"><path d="M7 4.5v15l12.5-7.5z"/></svg></div>
+        <div class="num" id="num">5</div>
+      </div>
+      <div class="next-title">The Snail Who Wanted to Fly</div>
+      <div class="next-sub">Puddle Lane Stories · 5:48</div>
+
+      <div class="label" id="more-label" style="left:96px; top:782px">MORE TO WATCH</div>
+      <div id="row"></div>
+
+      <div class="playing" id="playing" hidden>Playing: The Snail Who Wanted to Fly<small id="playing-sub">The countdown ran out with no key pressed (autoplay step 2 of 2)</small></div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note"><h2>When it shows</h2><p>Only when autoplay would have played the next video: autoplay is on, the chain isn't used up, and the server didn't say stop. Otherwise the TV goes back to the rows, as now.</p></div>
+    <div class="note"><h2>The countdown</h2><p><b>5 seconds</b>, a ring that empties and a yellow number. At 0 the next video plays as an autoplay step. Waiting here doesn't count as watch time.</p></div>
+    <div class="note"><h2>Any press stops it</h2><p>The first key stops it for good and still does its job: <b>OK</b> plays what has focus (Up next to begin with), the arrows move, <b>Back</b> goes to the rows.</p></div>
+    <div class="note"><h2>His pick starts a new chain</h2><p>Watch again, Up next pressed by hand, or a card from the row is his own choice, so the "videos in a row" count starts over. Only the countdown adds to it.</p></div>
+    <div class="note"><h2>Left alone</h2><p>After a press, 2 minutes with no key goes back to the rows. If time runs out or a parent presses End now, the Stopped screen takes over.</p></div>
+    <div class="note"><h2>Nothing new on the server</h2><p>Up next and the row are the list <b>/upnext</b> already sends: allowed videos that fit the time left, same channel first. Playing one is checked again by <b>/play</b>.</p></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const SECONDS = 5;
+  const screen = document.getElementById("screen"), tv = document.getElementById("tv");
+  // Scale the 1920x1080 frame to the box.
+  const fit = () => { screen.style.transform = `scale(${tv.clientWidth / 1920})`; };
+  try { new ResizeObserver(fit).observe(tv); } catch (e) { addEventListener("resize", fit); }
+  fit();
+
+  // Made-up thumbnails: a sky, a sun and a hill in each card's colours. No real videos (the boys' history stays home).
+  const scene = (el, a, b, sun, hill) => {
+    el.style.background = `radial-gradient(circle at 74% 30%, ${sun} 0 9%, transparent 9.5%),
+      radial-gradient(120% 70% at 30% 112%, ${hill} 0 55%, transparent 55.5%),
+      radial-gradient(90% 60% at 92% 118%, ${hill}cc 0 50%, transparent 50.5%), linear-gradient(160deg, ${a}, ${b})`;
+  };
+  scene(document.getElementById("was-thumb"), "#7fb6e8", "#3b6fb0", "#fff3b0", "#2f7d5b");
+  scene(document.getElementById("next-thumb"), "#ffb48a", "#d2577a", "#fff6c9", "#6b3fa0");
+
+  const more = [
+    ["The Snail Who Wanted to Fly", "5:48"], // first card is Up next itself; the row starts after it
+    ["Puddle Lane: The Lost Kite", "6:30", "#a8e0c0", "#3f9c86", "#fffbe0", "#25536b"],
+    ["Puddle Lane: Moon Picnic", "4:55", "#2a2f6b", "#4d3d9e", "#f6f0c4", "#1d2050"],
+    ["Counting Ducks to Ten", "3:20", "#ffe08a", "#f0a73a", "#ffffff", "#5b8f2e"],
+    ["Build a Cardboard Castle", "8:05", "#c8d2dd", "#7e8da3", "#ffe9a8", "#8a5a3c"],
+    ["Rainbow Song", "2:44", "#ff9fb8", "#9b6bff", "#fffbd6", "#3c7dd9"],
+  ].slice(1);
+  const row = document.getElementById("row");
+  more.forEach(([title, len, a, b, sun, hill], i) => {
+    const x = 96 + i * 408;
+    row.insertAdjacentHTML("beforeend",
+      `<div class="card-plate f" data-f="card${i}" style="left:${x - 12}px; top:822px"></div>` +
+      `<div class="thumb" style="left:${x}px; top:834px; width:360px; height:203px"><div class="len">${len}</div></div>` +
+      `<div class="card-title" style="left:${x}px; top:1044px">${title}</div>`);
+    scene(row.querySelectorAll(".thumb")[i], a, b, sun, hill);
+  });
+
+  // Focus: Back / Watch again on the left, Up next on the right, the row below.
+  const grid = { back: { down: "again", right: "next" }, again: { up: "back", right: "next", down: "card0" }, next: { left: "again", down: "card1", up: "back" } };
+  more.forEach((_, i) => { grid["card" + i] = { up: i < 2 ? "again" : "next", left: i ? "card" + (i - 1) : null, right: i < more.length - 1 ? "card" + (i + 1) : null }; });
+  let focus = "next";
+  const drawFocus = () => {
+    for (const el of screen.querySelectorAll(".f")) el.classList.toggle("on", el.dataset.f === focus);
+    document.getElementById("next-label").classList.toggle("on", focus === "next" || focus === "back" || focus === "again");
+    document.getElementById("more-label").classList.toggle("on", focus.startsWith("card"));
+  };
+
+  // The countdown.
+  const left = document.getElementById("left"), num = document.getElementById("num"), C = 2 * Math.PI * 100;
+  left.style.strokeDasharray = `${C}`;
+  let start = 0, raf = 0, counting = false, loop = 0;
+  const hint = document.getElementById("hint"), badge = document.getElementById("badge-text");
+  const showCounting = (on) => {
+    document.getElementById("ring").style.display = on ? "" : "none";
+    num.style.display = on ? "" : "none";
+    badge.textContent = on ? "Plays by itself" : "Pick one";
+    document.getElementById("st-count").setAttribute("aria-pressed", String(on));
+    document.getElementById("st-stopped").setAttribute("aria-pressed", String(!on));
+    hint.textContent = on ? "No key: Up next plays at 0" : "Stopped. Nothing plays until he picks";
+  };
+  const tick = (t) => {
+    if (!counting) return;
+    const done = Math.min(1, (t - start) / (SECONDS * 1000));
+    left.style.strokeDashoffset = `${C * done}`;
+    num.textContent = String(Math.max(1, Math.ceil(SECONDS - done * SECONDS)));
+    if (done >= 1) {
+      counting = false; play("The countdown ran out with no key pressed. The mockup starts over in a moment.");
+      loop = setTimeout(begin, 3500);  // so someone who looked away still sees it count
+      return;
+    }
+    raf = requestAnimationFrame(tick);
+  };
+  const begin = () => {
+    clearTimeout(loop);
+    document.getElementById("playing").hidden = true;
+    focus = "next"; drawFocus();
+    counting = true; showCounting(true);
+    left.style.strokeDashoffset = "0"; num.textContent = String(SECONDS);
+    cancelAnimationFrame(raf);
+    start = performance.now(); raf = requestAnimationFrame(tick);
+  };
+  const stop = () => { if (!counting) return; counting = false; cancelAnimationFrame(raf); showCounting(false); };
+  const play = (why) => {
+    const title = focus === "again" ? "Paper Boats in the Rain, from the start"
+      : focus.startsWith("card") ? more[+focus.slice(4)][0] : "The Snail Who Wanted to Fly";
+    const el = document.getElementById("playing");
+    el.firstChild.textContent = `Playing: ${title}`;
+    document.getElementById("playing-sub").textContent = why;
+    el.hidden = false;
+    hint.textContent = "Start the countdown again to replay the mockup";
+  };
+
+  tv.addEventListener("keydown", (e) => {
+    if (!document.getElementById("playing").hidden) return;
+    const dir = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right" }[e.key];
+    if (!dir && !["Enter", " ", "Escape", "Backspace"].includes(e.key)) return;
+    e.preventDefault();
+    stop(); // any press stops the countdown, and still does its job
+    if (dir) { const to = grid[focus][dir]; if (to) focus = to; drawFocus(); return; }
+    if (e.key === "Escape" || e.key === "Backspace" || focus === "back") return play("Back: to the rows. Nothing plays.");
+    play(focus === "next" ? "He pressed OK on Up next: his pick, so the chain starts over" : "His pick from the screen: the chain starts over");
+  });
+  tv.addEventListener("pointerdown", () => { tv.focus(); clearTimeout(loop); stop(); });
+  document.getElementById("restart").addEventListener("click", () => { begin(); tv.focus(); });
+  document.getElementById("st-count").addEventListener("click", begin);
+  document.getElementById("st-stopped").addEventListener("click", () => { begin(); stop(); });
+  drawFocus(); begin();
+})();
+</script>

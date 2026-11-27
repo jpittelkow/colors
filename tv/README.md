@@ -46,7 +46,12 @@ Release builds are signed with the key named in `tv/keystore.properties` (git-ig
 ```bash
 adb -s <tv-ip>:5555 install -r app/build/outputs/apk/release/app-release.apk
 adb -s <tv-ip>:5555 shell cmd package compile -m speed-profile -f app.colors.tv   # smooth from the first run
+adb -s <tv-ip>:5555 shell pm grant app.colors.tv android.permission.RECORD_AUDIO   # voice search, no prompt for the boys
 ```
+
+Voice search (0.5.5) listens through the TV's own speech recognizer with `SpeechRecognizer`. Google TV's listening
+screen (`RECOGNIZE_SPEECH`) hears the words but never hands them back, and the remote's mic button always goes to
+Google Assistant (it arrives over Bluetooth voice, not as a key), so the red mic on the search screen is the way in.
 
 A debug build can be pointed at another server with
 `adb shell am start -n app.colors.tv.dev/app.colors.tv.MainActivity --es server http://<host>:8460` (release builds

@@ -4,9 +4,13 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import android.content.ActivityNotFoundException
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalContext
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -262,27 +266,57 @@ fun SearchScreen(nav: Nav, profile: Profile, voice: Boolean = false, query0: Str
     val played = remember { FocusRequester() }
     val mic = remember { FocusRequester() }
 
-    // Voice: the TV's own speech recognizer (Google's, the same one as the remote's mic) turns what he says into
-    // words, which fill the box; the search runs as usual, and the first result gets the focus (2026-11-27).
+    // Voice (2026-11-27): colors listens through the TV's speech recognizer itself (SpeechRecognizer, with the
+    // microphone permission). Google TV's own listening screen (RECOGNIZE_SPEECH) heard the words but never handed
+    // them back. What he says shows in the box as he speaks; the search runs as usual and the first result gets the
+    // focus. The words go only to the TV's recognizer (Google's, as with the remote's own mic) and to colors' search.
     var heard by remember { mutableStateOf(query0.isNotEmpty()) }
-    val listen = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
-        val said = r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.trim()?.take(60)
-        if (!said.isNullOrEmpty()) { field = TextFieldValue(said, TextRange(said.length)); heard = true }
-    }
+    var listening by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
-    fun startListening() = try {
-        val ask = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+    val recognizer = remember { if (SpeechRecognizer.isRecognitionAvailable(ctx)) SpeechRecognizer.createSpeechRecognizer(ctx) else null }
+    DisposableEffect(recognizer) { onDispose { recognizer?.destroy() } }
+    fun said(b: android.os.Bundle?) = b?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim()?.take(60)
+    fun listenNow() {
+        val r = recognizer ?: return nav.toast("This TV can't listen. Type it instead.")
+        r.setRecognitionListener(object : RecognitionListener {
+            override fun onReadyForSpeech(params: android.os.Bundle?) { listening = true }
+            override fun onBeginningOfSpeech() {}
+            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onBufferReceived(buffer: ByteArray?) {}
+            override fun onEndOfSpeech() {}
+            override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
+            override fun onPartialResults(partial: android.os.Bundle?) {
+                said(partial)?.takeIf { it.isNotEmpty() }?.let { field = TextFieldValue(it, TextRange(it.length)) }
+            }
+            override fun onResults(results: android.os.Bundle?) {
+                listening = false
+                val words = said(results)
+                android.util.Log.i("colors.voice", "heard ${words?.length ?: -1} chars")  // never the words: a child's search
+                if (!words.isNullOrEmpty()) { field = TextFieldValue(words, TextRange(words.length)); heard = true }
+            }
+            override fun onError(error: Int) {
+                listening = false
+                android.util.Log.i("colors.voice", "error $error")
+                if (error != SpeechRecognizer.ERROR_CLIENT) nav.toast("I didn't catch that. Press the mic and say it again.")
+            }
+        })
+        r.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            .putExtra(RecognizerIntent.EXTRA_PROMPT, "Say what you want to watch")
+            .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-        // Some TVs have two recognizers, and Android then asks which one, a choice a child can't make (Chromecast
-        // HD, 2026-11-27). Take Google TV's own (the one the remote's mic uses), else the first there is.
-        val all = ctx.packageManager.queryIntentActivities(ask, 0)
-        (all.firstOrNull { it.activityInfo.packageName == "com.google.android.katniss" } ?: all.firstOrNull())
-            ?.activityInfo?.let { ask.setClassName(it.packageName, it.name) }
-        listen.launch(ask)
-    } catch (e: ActivityNotFoundException) {
-        nav.toast("This TV can't listen. Type it instead.")
+            .putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, ctx.packageName))
+    }
+    // The microphone permission is granted once per TV over adb when colors is installed; asking here is the fallback.
+    var askedMic by remember { mutableStateOf(false) }
+    val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        if (ok) askedMic = true else nav.toast("colors needs the microphone to listen. Type it instead.")
+    }
+    LaunchedEffect(askedMic) { if (askedMic) { askedMic = false; listenNow() } }
+    fun startListening() {
+        if (listening) { recognizer?.stopListening(); return }  // the mic again: done talking
+        if (ctx.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
+            askMic.launch(Manifest.permission.RECORD_AUDIO)
+        else listenNow()
     }
     val grid = rememberLazyGridState(initialFirstVisibleItemIndex = back?.index?.let { it - it % 3 } ?: 0)
     val keyboard = LocalSoftwareKeyboardController.current
@@ -305,7 +339,8 @@ fun SearchScreen(nav: Nav, profile: Profile, voice: Boolean = false, query0: Str
         ) {
             Icon(Icons.Search, 44, C.Rail)
             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                if (query.isEmpty()) BasicText("Search your videos", style = text(36, FontWeight.Medium, color = C.Muted))
+                if (query.isEmpty()) BasicText(if (listening) "Listening… say it now" else "Search your videos",
+                    style = text(36, FontWeight.Medium, color = if (listening) C.Red else C.Muted))
                 BasicTextField(
                     field, { field = if (it.text.length <= 60) it else field },
                     Modifier.fillMaxWidth().focusRequester(box).onFocusChanged { if (it.isFocused) col = 0 }
@@ -333,10 +368,10 @@ fun SearchScreen(nav: Nav, profile: Profile, voice: Boolean = false, query0: Str
         // The mic, red like the play button: press it and say it.
         Focusable({ startListening() }, Modifier.offset(x = s(84 + 1120 + 24), y = s(66)).focusRequester(mic).onFocusChanged { if (it.isFocused) col = 1 }) { focused ->
             Box(
-                Modifier.size(s(96)).clip(CircleShape).background(C.Red)
-                    .border(if (focused) s(5) else s(3), if (focused) C.Plate else C.Plate.copy(alpha = .6f), CircleShape),
+                Modifier.size(s(96)).clip(CircleShape).background(if (listening) C.Plate else C.Red)
+                    .border(if (focused || listening) s(5) else s(3), if (listening) C.Red else if (focused) C.Plate else C.Plate.copy(alpha = .6f), CircleShape),
                 contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Mic, 48, Color.White) }
+            ) { Icon(Icons.Mic, 48, if (listening) C.Red else Color.White) }  // listening: white with a red mic
         }
         val r = results
         when {

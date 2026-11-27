@@ -3,10 +3,12 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- To find the TV's speech recognizer for voice search (Android 11+ hides other apps otherwise). -->
+    <!-- Voice search: colors listens through the TV's speech recognizer only while the red mic is on. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- To reach the TV's speech recognizer (Android 11+ hides other apps' services otherwise). -->
     <queries>
         <intent>
-            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+            <action android:name="android.speech.RecognitionService" />
         </intent>
     </queries>
 

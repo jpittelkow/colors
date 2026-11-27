@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -94,6 +95,7 @@ fun PlayerScreen(nav: Nav, profile: Profile, itemId: Int, chain: Int, fromStart:
     var autoplayN by remember { mutableStateOf(2) }
     var between by remember { mutableStateOf(true) }
     var finished by remember { mutableStateOf(false) }
+    var onTimeline by remember { mutableStateOf(false) }  // the timeline has the focus: Left/Right move the video
     val root = remember { FocusRequester() }
     val playButton = remember { FocusRequester() }
 
@@ -157,7 +159,7 @@ fun PlayerScreen(nav: Nav, profile: Profile, itemId: Int, chain: Int, fromStart:
             playing = player.isPlaying
             p.skip.firstOrNull { pos >= it.startS && pos < it.endS - 0.3 }?.let { player.seekTo((it.endS * 1000).toLong()) }
             if (controls && player.isPlaying && System.currentTimeMillis() - lastKey > HIDE_AFTER_MS) {
-                controls = false
+                controls = false; onTimeline = false
                 runCatching { root.requestFocus() }
             }
             delay(100)
@@ -204,7 +206,7 @@ fun PlayerScreen(nav: Nav, profile: Profile, itemId: Int, chain: Int, fromStart:
     fun show() {
         lastKey = System.currentTimeMillis()
         if (!controls) {
-            controls = true
+            controls = true; onTimeline = false
             scope.launch { delay(50); runCatching { playButton.requestFocus() } }
         }
     }
@@ -215,7 +217,7 @@ fun PlayerScreen(nav: Nav, profile: Profile, itemId: Int, chain: Int, fromStart:
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 lastKey = System.currentTimeMillis()
                 when (e.key.nativeKeyCode) {
-                    AndroidKey.KEYCODE_BACK -> if (controls) { controls = false; runCatching { root.requestFocus() }; true } else {
+                    AndroidKey.KEYCODE_BACK -> if (controls) { controls = false; onTimeline = false; runCatching { root.requestFocus() }; true } else {
                         scope.launch { runCatching { nav.api.heartbeat(profile.id, itemId, player.currentPosition / 1000.0, "paused") } }
                         false
                     }
@@ -224,8 +226,20 @@ fun PlayerScreen(nav: Nav, profile: Profile, itemId: Int, chain: Int, fromStart:
                     }
                     AndroidKey.KEYCODE_MEDIA_FAST_FORWARD -> { player.seekForward(); show(); true }
                     AndroidKey.KEYCODE_MEDIA_REWIND -> { player.seekBack(); show(); true }
-                    AndroidKey.KEYCODE_DPAD_LEFT -> if (!controls) { player.seekBack(); show(); true } else false
-                    AndroidKey.KEYCODE_DPAD_RIGHT -> if (!controls) { player.seekForward(); show(); true } else false
+                    // With the timeline focused, Left/Right are caught here, before focus can move: 10 s a press, 30 once
+                    // held a moment, a minute held longer (2026-11-27: quick presses slid the focus off the timeline).
+                    AndroidKey.KEYCODE_DPAD_LEFT, AndroidKey.KEYCODE_DPAD_RIGHT -> when {
+                        !controls -> { if (e.key.nativeKeyCode == AndroidKey.KEYCODE_DPAD_LEFT) player.seekBack() else player.seekForward(); show(); true }
+                        onTimeline -> {
+                            val held = e.nativeKeyEvent.repeatCount
+                            val step = when { held >= 20 -> 60_000L; held >= 6 -> 30_000L; else -> SEEK_MS }
+                            val end = if (player.duration > 0) player.duration else Long.MAX_VALUE
+                            val by = if (e.key.nativeKeyCode == AndroidKey.KEYCODE_DPAD_LEFT) -step else step
+                            player.seekTo((player.currentPosition + by).coerceIn(0L, end))
+                            true
+                        }
+                        else -> false
+                    }
                     AndroidKey.KEYCODE_DPAD_CENTER, AndroidKey.KEYCODE_ENTER, AndroidKey.KEYCODE_DPAD_UP, AndroidKey.KEYCODE_DPAD_DOWN ->
                         if (!controls) { show(); true } else false
                     else -> false
@@ -233,13 +247,20 @@ fun PlayerScreen(nav: Nav, profile: Profile, itemId: Int, chain: Int, fromStart:
             },
     ) {
         AndroidView(
-            factory = { c -> PlayerView(c).apply { useController = false; resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT; this.player = player } },
+            // The video view never takes the focus: while it rebuffers after a seek it did, and the timeline lost it
+            // (2026-11-27).
+            factory = { c -> PlayerView(c).apply {
+                useController = false; resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT; this.player = player
+                isFocusable = false; isFocusableInTouchMode = false
+                descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
+            } },
             modifier = Modifier.fillMaxSize(),
         )
         val p = play
         if (p != null && controls) Controls(nav, profile, p.card, time, position, duration, playing, next, playButton,
             onPlayPause = { if (player.isPlaying) player.pause() else player.play(); lastKey = System.currentTimeMillis() },
             onStartOver = { player.seekTo(0); player.play(); lastKey = System.currentTimeMillis() },
+            onTimeline = { onTimeline = it },
             onFocusMove = { lastKey = System.currentTimeMillis() })
         // With the controls up only: the name and a QR code to this child's page for grown-ups. Nothing sits over the
         // picture while it plays, so nothing still can burn into an OLED (Jeff 2026-11-24).
@@ -252,7 +273,8 @@ fun PlayerScreen(nav: Nav, profile: Profile, itemId: Int, chain: Int, fromStart:
 @Composable
 private fun Controls(
     nav: Nav, profile: Profile, card: Card, time: TimeState?, position: Double, duration: Double, playing: Boolean,
-    next: List<Card>, playButton: FocusRequester, onPlayPause: () -> Unit, onStartOver: () -> Unit, onFocusMove: () -> Unit,
+    next: List<Card>, playButton: FocusRequester, onPlayPause: () -> Unit, onStartOver: () -> Unit, onTimeline: (Boolean) -> Unit,
+    onFocusMove: () -> Unit,
 ) {
     val s = LocalScale.current
     val scope = rememberCoroutineScope()
@@ -294,9 +316,7 @@ private fun Controls(
                     }
                     BasicText(clock(position), Modifier.offset(x = s(96), y = s(664)), style = text(22))
                     BasicText(clock(duration), Modifier.align(Alignment.TopEnd).offset(x = -s(96), y = s(664)), style = text(22))
-                    Box(Modifier.offset(x = s(96), y = s(726)).width(s(1728)).height(s(8)).clip(RoundedCornerShape(s(4))).background(Color(0xFF5B5A58))) {
-                        Box(Modifier.fillMaxWidth(if (duration > 0) (position / duration).toFloat().coerceIn(0f, 1f) else 0f).height(s(8)).background(C.Plate))
-                    }
+                    Timeline(position, duration, onPlayPause, onFocusMove, Modifier.offset(x = s(96), y = s(706)).onFocusChanged { onTimeline(it.hasFocus) })
                     Row(Modifier.offset(x = s(96), y = s(780)), horizontalArrangement = Arrangement.spacedBy(s(20))) {
                         Pill("Back", { nav.back() }, icon = Icons.Back, bg = C.PlayerPill)
                         Pill("Start over", onStartOver, icon = Icons.Restart, bg = C.PlayerPill)
@@ -337,6 +357,26 @@ private fun Controls(
 private const val CONTROLS_H = 870
 /** One row of videos under the controls: a gap, the name, the cards. */
 private const val CONTROL_ROW = 48 + 57 + 426 + 60
+
+/**
+ * The timeline (reference.md, Player: x 96-1824, centred on y 730). Up from the buttons focuses it; Left and Right
+ * then move 10 seconds, 30 once held a moment, a minute held longer; OK plays or pauses (2026-11-27: it was only a
+ * picture, so there was no way to move through a video with the controls up).
+ */
+@Composable
+private fun Timeline(position: Double, duration: Double, onPlayPause: () -> Unit, onFocusMove: () -> Unit, modifier: Modifier) {
+    val s = LocalScale.current
+    // Left/Right while this has the focus are handled by the player screen's own key handler (onTimeline).
+    Focusable(onPlayPause, modifier.width(s(1728)).height(s(48)), onFocus = onFocusMove) { focused ->
+        val done = if (duration > 0) (position / duration).toFloat().coerceIn(0f, 1f) else 0f
+        val h = if (focused) 12 else 8
+        Box(Modifier.align(Alignment.CenterStart).fillMaxWidth().height(s(h)).clip(RoundedCornerShape(s(h / 2))).background(Color(0xFF5B5A58))) {
+            Box(Modifier.fillMaxWidth(done).fillMaxHeight().background(if (focused) C.Red else C.Plate))
+        }
+        // Focused: a round handle where we are, so it reads as something to move.
+        if (focused) Box(Modifier.align(Alignment.CenterStart).offset(x = s(1728) * done - s(18)).size(s(36)).clip(CircleShape).background(C.Plate))
+    }
+}
 
 private const val BADGE_W = 168
 

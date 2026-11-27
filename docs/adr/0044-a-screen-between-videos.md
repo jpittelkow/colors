@@ -43,7 +43,10 @@ plays the first of those or goes back to the rows.
   If time runs out on this screen, a parent presses End now, or the limit stamp changes (the TV polls it every few
   seconds), the screen gives way to the Stopped screen, as the rows do.
 - **Last one:** when "last one" is on, the video that ended was the last, so no screen. The player stops as it does now.
-- **No server change** beyond what `/upnext` already returns (the 24-video list since the overlay got its rows).
+- **Or fast** (added 2026-11-27, Jeff liked going straight on in some cases): autoplay is a three-way choice per child,
+  Kid › Limits › After a video: **Off**, **With countdown** (this screen, the default) or **Fast** (straight into the
+  next video, no screen, as before this ADR). Stored as `limits.autoplay_screen` (1/0, migration 0009); `/upnext`
+  says `"between": true|false` and the TV follows it. A TV app older than 0.5 ignores it and always goes straight on.
 
 ## Consequences
 
@@ -68,5 +71,5 @@ plays the first of those or goes back to the rows.
 ## Where it lives
 
 `tv/app/src/main/java/app/colors/tv/ui/Between.kt` (the screen), `ui/Player.kt` (end of video → Between; `fromStart`
-for Watch again), `ui/Screens.kt` (`Screen.Between`), `MainActivity.kt`. TV app 0.5.0. Mockup:
+for Watch again), `ui/Screens.kt` (`Screen.Between`), `MainActivity.kt`. TV app 0.5.0; fast autoplay 0.5.1 (`limits.autoplay_screen`, `server/migrations/0009_autoplay_screen.sql`). Mockup:
 `docs/design/between-videos.html`. Related: ADR 0011, 0012, 0013, 0017.

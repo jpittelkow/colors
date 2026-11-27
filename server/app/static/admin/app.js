@@ -1305,9 +1305,20 @@ async function viewLimits(pid) {
   let timefit = !!l.timefit, show_timer = !!l.show_timer;
   // Autoplay is a switch; the count shows only when it's on. Off is stored as 0 (the TV plays the next video only
   // while chain + 1 < autoplay_n, so 0 and 1 both mean off; 2026-11-25: the bare number hid that).
-  let autoplay = (l.autoplay_n ?? 2) > 1;
+  // Off, on with the screen between videos (ADR 0044), or fast: straight on to the next one, no screen (2026-11-27).
+  let autoplay = (l.autoplay_n ?? 2) <= 1 ? "off" : l.autoplay_screen === 0 ? "fast" : "screen";
+  const autoplaySub = { off: "Back to the home screen after every video", screen: "A 5-second countdown, with Watch again and more to watch",
+    fast: "Straight into the next one, no screen in between" };
   const autoplayRow = row(h("label", { for: "autoplay" }, "Stop after, videos in a row"), f.autoplay_n, "Counting the one he picked");
-  autoplayRow.style.display = autoplay ? "" : "none";
+  const autoplayHelp = h("span", { class: "kt-muted" });
+  const autoplaySeg = h("div", { class: "seg", role: "group", "aria-label": "Play the next video by itself" });
+  const drawAutoplay = () => {
+    fill(autoplaySeg, [["off", "Off"], ["screen", "With countdown"], ["fast", "Fast"]].map(([v, t]) =>
+      h("button", { type: "button", "aria-pressed": autoplay === v ? "true" : "false", onclick: () => { autoplay = v; drawAutoplay(); } }, t)));
+    autoplayHelp.textContent = autoplaySub[autoplay];
+    autoplayRow.style.display = autoplay === "off" ? "none" : "";
+  };
+  drawAutoplay();
   const val = (x) => (x.value === "" ? null : +x.value);
   screen(`${p.name}'s limits`, { back: `kid/${pid}` },
     h("h2", { class: "kt-label" }, "Time a day"),
@@ -1329,16 +1340,13 @@ async function viewLimits(pid) {
       row("Timer on the TV", switchBtn(show_timer, "Timer on the TV", (v) => (show_timer = v)))),
     h("h2", { class: "kt-label" }, "After a video"),
     h("div", { class: "kt-list" },
-      row("Play the next video by itself", switchBtn(autoplay, "Play the next video by itself", (v) => {
-        autoplay = v;
-        autoplayRow.style.display = v ? "" : "none";
-      }), "Off: back to the home screen after every video"),
+      h("div", { class: "kt-list__row autoplay-row" }, h("span", { class: "kt-list__text" }, "Play the next video by itself", autoplayHelp), autoplaySeg),
       autoplayRow),
     h("button", { class: "kt-btn kt-btn--primary kt-btn--wide", type: "button", onclick: () => run(async () => {
       await api(`/limits/${pid}`, { method: "PUT", body: {
         weekday_min: val(f.weekday_min), weekend_min: val(f.weekend_min), session_min: val(f.session_min),
         break_min: val(f.break_min) ?? 60, closed_from: f.closed_from.value || null, closed_to: f.closed_to.value || null,
-        timefit, grace_min: val(f.grace_min) ?? 2, show_timer, autoplay_n: autoplay ? Math.max(2, val(f.autoplay_n) ?? 2) : 0,
+        timefit, grace_min: val(f.grace_min) ?? 2, show_timer, autoplay_n: autoplay === "off" ? 0 : Math.max(2, val(f.autoplay_n) ?? 2), autoplay_screen: autoplay !== "fast",
       } });
       toast("Saved");
       go(`kid/${pid}`);

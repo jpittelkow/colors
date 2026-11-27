@@ -232,3 +232,15 @@ def test_each_state_has_its_own_way_out(env):
     assert act("lastone") == 200 and time_of()["lastone"] is True
     assert act("cancel-lastone") == 200 and time_of()["lastone"] is False
     assert act("nonsense") == 404
+
+
+def test_fast_autoplay_skips_the_screen_between_videos(env):
+    """2026-11-27 (ADR 0044): autoplay with the countdown screen, or fast, straight on. /upnext tells the TV which."""
+    pid, tv, ids = _setup(env)
+    up = lambda: tv.get(f"{V}/upnext", params={"profile_id": pid, "item_id": ids[0]}).json()
+    assert up()["between"] is True  # the default: the screen between videos
+    env.client.put(f"/api/admin/limits/{pid}", json={"autoplay_n": 3, "autoplay_screen": False})
+    assert env.client.get(f"/api/admin/limits/{pid}").json()["autoplay_screen"] == 0
+    assert up()["between"] is False and up()["autoplay_n"] == 3
+    env.client.put(f"/api/admin/limits/{pid}", json={"autoplay_n": 3})  # leaving it out means the screen
+    assert up()["between"] is True

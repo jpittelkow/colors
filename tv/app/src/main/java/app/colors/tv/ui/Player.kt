@@ -92,6 +92,7 @@ fun PlayerScreen(nav: Nav, profile: Profile, itemId: Int, chain: Int, fromStart:
     var playing by remember { mutableStateOf(true) }
     var next by remember { mutableStateOf<List<Card>>(emptyList()) }
     var autoplayN by remember { mutableStateOf(2) }
+    var between by remember { mutableStateOf(true) }
     var finished by remember { mutableStateOf(false) }
     val root = remember { FocusRequester() }
     val playButton = remember { FocusRequester() }
@@ -142,7 +143,7 @@ fun PlayerScreen(nav: Nav, profile: Profile, itemId: Int, chain: Int, fromStart:
         if (p.resumeS > 1 && !fromStart) player.seekTo((p.resumeS * 1000).toLong())
         player.playWhenReady = true
         launch {
-            runCatching { nav.api.upNext(profile.id, itemId) }.getOrNull()?.let { (n, cards) -> autoplayN = n; next = cards }
+            runCatching { nav.api.upNext(profile.id, itemId) }.getOrNull()?.let { autoplayN = it.autoplayN; between = it.between; next = it.cards }
         }
     }
 
@@ -190,8 +191,9 @@ fun PlayerScreen(nav: Nav, profile: Profile, itemId: Int, chain: Int, fromStart:
                     if (beat?.command == "timeup" || beat?.command == "stop") return@launch stopAndShow(beat.time)
                     val upcoming = next.firstOrNull()
                     val ended = play?.card
-                    if (upcoming != null && ended != null && chain + 1 < autoplayN) nav.replace(Screen.Between(profile, ended, next, chain))
-                    else nav.back()
+                    if (upcoming == null || ended == null || chain + 1 >= autoplayN) nav.back()
+                    else if (between) nav.replace(Screen.Between(profile, ended, next, chain))
+                    else nav.replace(Screen.Player(profile, upcoming.id, chain + 1))  // fast autoplay: straight on
                 }
             }
         }

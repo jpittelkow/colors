@@ -131,9 +131,10 @@ class Api(context: Context) {
     suspend fun stamp(profileId: Int): String =
         (call("GET", "/stamp?profile_id=$profileId") as JSONObject).getString("stamp")
 
-    suspend fun upNext(profileId: Int, itemId: Int): Pair<Int, List<Card>> {
+    /** What may follow a video: how many in a row, whether the screen between them shows (ADR 0044), the videos. */
+    suspend fun upNext(profileId: Int, itemId: Int): UpNext {
         val o = call("GET", "/upnext?profile_id=$profileId&item_id=$itemId") as JSONObject
-        return o.optInt("autoplay_n", 2) to o.getJSONArray("cards").objects().map(::card)
+        return UpNext(o.optInt("autoplay_n", 2), o.optBoolean("between", true), o.getJSONArray("cards").objects().map(::card))
     }
 
     // ---- playback ---------------------------------------------------------------------------------------------------
@@ -227,6 +228,8 @@ data class Container(val id: Int, val title: String, val cards: List<Card>)
 data class ChannelTile(val id: Int, val title: String, val count: Int, val unwatched: Int, val picture: String, val round: Boolean)
 
 data class Segment(val startS: Double, val endS: Double)
+
+data class UpNext(val autoplayN: Int, val between: Boolean, val cards: List<Card>)
 
 data class Play(
     val card: Card, val streamUrl: String, val resumeS: Double, val skip: List<Segment>, val heartbeatS: Int,

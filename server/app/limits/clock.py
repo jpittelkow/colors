@@ -61,6 +61,7 @@ class Context:
     show_timer: bool = True
     grace_s: float = 120
     autoplay_n: int = 2
+    autoplay_screen: bool = True     # the screen between videos (ADR 0044); False = fast, straight on
     lastone: bool = False
     # The one video "last one" allows, once chosen: the one playing when a parent pressed it, else the next one
     # started. Kept in the override's note as "item:<id>".
@@ -95,7 +96,7 @@ def get_limits(conn: sqlite3.Connection, profile_id: int) -> dict:
         return dict(row)
     return {
         "profile_id": profile_id, "weekday_min": None, "weekend_min": None, "session_min": None, "break_min": 60,
-        "closed_from": None, "closed_to": None, "timefit": 1, "grace_min": 2, "show_timer": 1, "autoplay_n": 2,
+        "closed_from": None, "closed_to": None, "timefit": 1, "grace_min": 2, "show_timer": 1, "autoplay_n": 2, "autoplay_screen": 1,
     }
 
 
@@ -105,7 +106,8 @@ def context(conn: sqlite3.Connection, profile_id: int, now: float | None = None)
     day = day_key(now)
     ctx = Context(
         profile_id=profile_id, timefit=bool(lim["timefit"]), show_timer=bool(lim["show_timer"]),
-        grace_s=(lim["grace_min"] or 0) * 60, autoplay_n=lim["autoplay_n"], limits=lim,
+        grace_s=(lim["grace_min"] or 0) * 60, autoplay_n=lim["autoplay_n"],
+        autoplay_screen=bool(lim["autoplay_screen"]), limits=lim,
     )
     row = conn.execute("SELECT seconds FROM watch_time WHERE profile_id = ? AND day = ?", (profile_id, day)).fetchone()
     ctx.used_today_s = row["seconds"] if row else 0

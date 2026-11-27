@@ -443,6 +443,7 @@ class LimitsIn(BaseModel):
     grace_min: int = Field(default=2, ge=0, le=30)
     show_timer: bool = True
     autoplay_n: int = Field(default=2, ge=0, le=20)
+    autoplay_screen: bool = True  # ADR 0044: False = fast autoplay, no screen between videos
 
 
 @router.get("/limits/{pid}")

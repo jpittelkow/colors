@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.ui.text.TextRange
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
@@ -241,12 +243,17 @@ fun ShelfScreen(nav: Nav, profile: Profile, kind: String) {
 @Composable
 fun SearchScreen(nav: Nav, profile: Profile) {
     val s = LocalScale.current
-    var field by remember { mutableStateOf(TextFieldValue("")) }
+    // Back from a video started here: the same search, the same results, that video focused (2026-11-27).
+    // Opened from the menu, it starts empty.
+    val back = remember { SearchReturn.take(profile.id) }
+    var field by remember { mutableStateOf(TextFieldValue(back?.query ?: "", TextRange(back?.query?.length ?: 0))) }
     val query = field.text
-    var results by remember { mutableStateOf<List<Card>?>(null) }
-    var col by remember { mutableIntStateOf(0) }
+    var results by remember { mutableStateOf(back?.results) }
+    var col by remember { mutableIntStateOf((back?.index ?: 0) % 3) }
     val box = remember { FocusRequester() }
     val firstResult = remember { FocusRequester() }
+    val played = remember { FocusRequester() }
+    val grid = rememberLazyGridState(initialFirstVisibleItemIndex = back?.index?.let { it - it % 3 } ?: 0)
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = LocalFocusManager.current
     // Ask once typing (or speaking) pauses, not on every letter; again when a limit changes what fits.
@@ -293,18 +300,28 @@ fun SearchScreen(nav: Nav, profile: Profile) {
             r == null -> Empty("Type, or press the mic on the remote and say it.")
             r.isEmpty() -> Empty("Nothing found for “$query”.")
             else -> LazyVerticalGrid(
-                GridCells.Fixed(3), Modifier.fillMaxSize().padding(top = s(210)),
+                GridCells.Fixed(3), Modifier.fillMaxSize().padding(top = s(210)), state = grid,
                 contentPadding = PaddingValues(start = s(72), end = s(72), bottom = s(200)),
                 horizontalArrangement = Arrangement.spacedBy(s(12)), verticalArrangement = Arrangement.spacedBy(s(40)),
             ) {
                 itemsIndexed(r, key = { _, c -> c.id }) { i, c ->
-                    VideoCard(c, { startPlaying(nav, profile, c) }, if (i == 0) Modifier.focusRequester(firstResult) else Modifier,
+                    VideoCard(c, { SearchReturn.keep(profile.id, query, r, i); startPlaying(nav, profile, c) },
+                        Modifier.then(if (i == 0) Modifier.focusRequester(firstResult) else Modifier)
+                            .then(if (i == back?.index) Modifier.focusRequester(played) else Modifier),
                         onFocus = { col = i % 3 })
                 }
             }
         }
     }
-    LaunchedEffect(Unit) { box.soon() }
+    LaunchedEffect(Unit) { if (back != null && !back.results.isNullOrEmpty()) played.soon() else box.soon() }
+}
+
+/** The search a video was started from, kept for one return to the search screen. */
+private object SearchReturn {
+    class Kept(val profileId: Int, val query: String, val results: List<Card>?, val index: Int)
+    private var kept: Kept? = null
+    fun keep(profileId: Int, query: String, results: List<Card>?, index: Int) { kept = Kept(profileId, query, results, index) }
+    fun take(profileId: Int): Kept? = kept?.takeIf { it.profileId == profileId }.also { kept = null }
 }
 
 @Composable

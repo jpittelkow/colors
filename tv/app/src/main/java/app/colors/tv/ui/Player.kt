@@ -8,6 +8,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,6 +17,10 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
@@ -34,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -41,6 +47,7 @@ import androidx.compose.ui.input.key.nativeKeyCode
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -70,7 +77,7 @@ private const val HIDE_AFTER_MS = 5_000L
  */
 @OptIn(UnstableApi::class)
 @Composable
-fun PlayerScreen(nav: Nav, profile: Profile, itemId: Int, chain: Int) {
+fun PlayerScreen(nav: Nav, profile: Profile, itemId: Int, chain: Int, fromStart: Boolean = false) {
     val s = LocalScale.current
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -121,7 +128,7 @@ fun PlayerScreen(nav: Nav, profile: Profile, itemId: Int, chain: Int) {
         leveler.apply(p.audio)  // even out the volume before the first sound (ADR 0041)
         player.setMediaItem(MediaItem.fromUri(p.streamUrl))
         player.prepare()
-        if (p.resumeS > 1) player.seekTo((p.resumeS * 1000).toLong())
+        if (p.resumeS > 1 && !fromStart) player.seekTo((p.resumeS * 1000).toLong())
         player.playWhenReady = true
         launch {
             runCatching { nav.api.upNext(profile.id, itemId) }.getOrNull()?.let { (n, cards) -> autoplayN = n; next = cards }
@@ -160,7 +167,8 @@ fun PlayerScreen(nav: Nav, profile: Profile, itemId: Int, chain: Int) {
         }
     }
 
-    // The end: tell the server, then play what is next while autoplay allows, else back to the rows (ADR 0013).
+    // The end: tell the server, then, while autoplay allows, the screen between videos with its countdown (ADR 0044),
+    // else back to the rows (ADR 0013).
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
@@ -170,7 +178,8 @@ fun PlayerScreen(nav: Nav, profile: Profile, itemId: Int, chain: Int) {
                     val beat = runCatching { nav.api.heartbeat(profile.id, itemId, player.duration / 1000.0, "ended") }.getOrNull()
                     if (beat?.command == "timeup" || beat?.command == "stop") return@launch stopAndShow(beat.time)
                     val upcoming = next.firstOrNull()
-                    if (upcoming != null && chain + 1 < autoplayN) nav.replace(Screen.Player(profile, upcoming.id, chain + 1))
+                    val ended = play?.card
+                    if (upcoming != null && ended != null && chain + 1 < autoplayN) nav.replace(Screen.Between(profile, ended, next, chain))
                     else nav.back()
                 }
             }
@@ -233,50 +242,88 @@ private fun Controls(
     next: List<Card>, playButton: FocusRequester, onPlayPause: () -> Unit, onStartOver: () -> Unit, onFocusMove: () -> Unit,
 ) {
     val s = LocalScale.current
+    val scope = rememberCoroutineScope()
+    val list = rememberLazyListState()
+    val peekPx = with(LocalDensity.current) { s(432).roundToPx() }
+    // Same channel first, then the rest: the order autoplay follows stays the server's (`next`).
+    val rows = remember(next, card.containerId) {
+        val same = next.filter { it.containerId == card.containerId }
+        val other = next.filter { it.containerId != card.containerId }
+        listOfNotNull(
+            same.takeIf { it.isNotEmpty() }?.let { "More ${card.containerTitle}" to it },
+            other.takeIf { it.isNotEmpty() }?.let { (if (same.isEmpty()) "Up next" else "Something new") to it },
+        )
+    }
+    // The overlay scrolls: the controls fill the first screen with the first row's name and the tops of its
+    // pictures showing below, then rows of more videos (2026-11-27: the one row was cut off and couldn't be reached).
     Box(Modifier.fillMaxSize().background(Color(0xC70B0B0B))) {
-        Column(Modifier.offset(x = s(96), y = s(96)).width(s(1100)), verticalArrangement = Arrangement.spacedBy(s(16))) {
-            BasicText(card.title, style = text(56, FontWeight.Bold, playful = true).copy(lineHeight = s.sp(72)), maxLines = 2, overflow = TextOverflow.Ellipsis)
-            BasicText(card.containerTitle, style = text(24))
-        }
-        Row(Modifier.align(Alignment.TopEnd).offset(x = -s(BADGE_W + 40 + 32), y = s(96)), horizontalArrangement = Arrangement.spacedBy(s(16)), verticalAlignment = Alignment.CenterVertically) {
-            if (time?.lastOne == true) Row(
-                Modifier.height(s(64)).clip(RoundedCornerShape(s(32))).background(Color(0xEB1A1A36)).padding(start = s(10), end = s(24)),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(s(12)),
-            ) {
-                Box(Modifier.size(s(44)).clip(CircleShape).background(C.Sun), contentAlignment = Alignment.Center) {
-                    BasicText("1", style = text(32, FontWeight.Bold, playful = true, color = C.Rail))
+        LazyColumn(
+            state = list, modifier = Modifier.fillMaxSize(), userScrollEnabled = false,
+            contentPadding = PaddingValues(bottom = s(1080 - CONTROL_ROW)),
+        ) {
+            item(key = "controls") {
+                Box(Modifier.fillMaxWidth().height(s(CONTROLS_H)).onFocusChanged { if (it.hasFocus) scope.launch { list.animateScrollToItem(0) } }) {
+                    Column(Modifier.offset(x = s(96), y = s(96)).width(s(1100)), verticalArrangement = Arrangement.spacedBy(s(16))) {
+                        BasicText(card.title, style = text(56, FontWeight.Bold, playful = true).copy(lineHeight = s.sp(72)), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        BasicText(card.containerTitle, style = text(24))
+                    }
+                    Row(Modifier.align(Alignment.TopEnd).offset(x = -s(BADGE_W + 40 + 32), y = s(96)), horizontalArrangement = Arrangement.spacedBy(s(16)), verticalAlignment = Alignment.CenterVertically) {
+                        if (time?.lastOne == true) Row(
+                            Modifier.height(s(64)).clip(RoundedCornerShape(s(32))).background(Color(0xEB1A1A36)).padding(start = s(10), end = s(24)),
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(s(12)),
+                        ) {
+                            Box(Modifier.size(s(44)).clip(CircleShape).background(C.Sun), contentAlignment = Alignment.Center) {
+                                BasicText("1", style = text(32, FontWeight.Bold, playful = true, color = C.Rail))
+                            }
+                            BasicText("Last one", style = text(28, FontWeight.Bold))
+                        }
+                        if (time != null) TimerPill(time)
+                    }
+                    BasicText(clock(position), Modifier.offset(x = s(96), y = s(664)), style = text(22))
+                    BasicText(clock(duration), Modifier.align(Alignment.TopEnd).offset(x = -s(96), y = s(664)), style = text(22))
+                    Box(Modifier.offset(x = s(96), y = s(726)).width(s(1728)).height(s(8)).clip(RoundedCornerShape(s(4))).background(Color(0xFF5B5A58))) {
+                        Box(Modifier.fillMaxWidth(if (duration > 0) (position / duration).toFloat().coerceIn(0f, 1f) else 0f).height(s(8)).background(C.Plate))
+                    }
+                    Row(Modifier.offset(x = s(96), y = s(780)), horizontalArrangement = Arrangement.spacedBy(s(20))) {
+                        Pill("Back", { nav.back() }, icon = Icons.Back, bg = C.PlayerPill)
+                        Pill("Start over", onStartOver, icon = Icons.Restart, bg = C.PlayerPill)
+                    }
+                    Focusable(onPlayPause, Modifier.align(Alignment.TopCenter).offset(y = s(768)).focusRequester(playButton), onFocus = onFocusMove) { focused ->
+                        Box(
+                            Modifier.size(s(96)).clip(CircleShape).background(C.Red)
+                                .then(if (focused) Modifier.border(s(5), C.Plate, CircleShape) else Modifier.border(s(3), C.Plate.copy(alpha = .6f), CircleShape)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (playing) Row(horizontalArrangement = Arrangement.spacedBy(s(12))) {
+                                repeat(2) { Box(Modifier.width(s(18)).height(s(52)).clip(RoundedCornerShape(s(5))).background(Color.White)) }
+                            } else Icon(Icons.Play, 52, Color.White, filled = true)
+                        }
+                    }
                 }
-                BasicText("Last one", style = text(28, FontWeight.Bold))
             }
-            if (time != null) TimerPill(time)
-        }
-        BasicText(clock(position), Modifier.offset(x = s(96), y = s(664)), style = text(22))
-        BasicText(clock(duration), Modifier.align(Alignment.TopEnd).offset(x = -s(96), y = s(664)), style = text(22))
-        Box(Modifier.offset(x = s(96), y = s(726)).width(s(1728)).height(s(8)).clip(RoundedCornerShape(s(4))).background(Color(0xFF5B5A58))) {
-            Box(Modifier.fillMaxWidth(if (duration > 0) (position / duration).toFloat().coerceIn(0f, 1f) else 0f).height(s(8)).background(C.Plate))
-        }
-        Row(Modifier.offset(x = s(96), y = s(780)), horizontalArrangement = Arrangement.spacedBy(s(20))) {
-            Pill("Back", { nav.back() }, icon = Icons.Back, bg = C.PlayerPill)
-            Pill("Start over", onStartOver, icon = Icons.Restart, bg = C.PlayerPill)
-        }
-        Focusable(onPlayPause, Modifier.align(Alignment.TopCenter).offset(y = s(768)).focusRequester(playButton), onFocus = onFocusMove) { focused ->
-            Box(
-                Modifier.size(s(96)).clip(CircleShape).background(C.Red)
-                    .then(if (focused) Modifier.border(s(5), C.Plate, CircleShape) else Modifier.border(s(3), C.Plate.copy(alpha = .6f), CircleShape)),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (playing) Row(horizontalArrangement = Arrangement.spacedBy(s(12))) {
-                    repeat(2) { Box(Modifier.width(s(18)).height(s(52)).clip(RoundedCornerShape(s(5))).background(Color.White)) }
-                } else Icon(Icons.Play, 52, Color.White, filled = true)
-            }
-        }
-        if (next.isNotEmpty()) Row(Modifier.offset(x = s(84), y = s(885)), horizontalArrangement = Arrangement.spacedBy(s(48))) {
-            next.take(3).forEach { c ->
-                VideoCard(c, { nav.replace(Screen.Player(profile, c.id)) }, onFocus = onFocusMove)
+            itemsIndexed(rows, key = { _, r -> r.first }) { ri, (title, cards) ->
+                Column(Modifier.height(s(CONTROL_ROW)).padding(top = s(48))) {
+                    BasicText(title.uppercase(), Modifier.padding(start = s(96)).height(s(57)), style = text(34, FontWeight.Bold), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    val rowState = rememberLazyListState()
+                    LazyRow(state = rowState, contentPadding = PaddingValues(start = s(84), end = s(400)), horizontalArrangement = Arrangement.spacedBy(s(48))) {
+                        itemsIndexed(cards, key = { _, c -> c.id }) { ci, c ->
+                            VideoCard(c, { nav.replace(Screen.Player(profile, c.id)) }, onFocus = {
+                                onFocusMove()
+                                scope.launch { list.animateScrollToItem(ri + 1) }
+                                scope.launch { if (ci >= 2) rowState.animateScrollToItem(ci - 2, peekPx) else rowState.animateScrollToItem(0) }
+                            })
+                        }
+                    }
+                }
             }
         }
     }
 }
+
+/** The first screen of the overlay; the first row's name and the tops of its pictures show below it. */
+private const val CONTROLS_H = 870
+/** One row of videos under the controls: a gap, the name, the cards. */
+private const val CONTROL_ROW = 48 + 57 + 426 + 60
 
 private const val BADGE_W = 168
 

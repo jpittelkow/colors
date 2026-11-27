@@ -298,7 +298,8 @@ def upnext(profile_id: int, item_id: int, request: Request, device_id: int = Dep
     ordered = sorted(same, key=lambda r: r["watched"]) + sorted(
         [r for r in rest if r not in same], key=lambda r: r["watched"]
     )
-    return {"autoplay_n": ctx.autoplay_n, "cards": [_card(r, profile_id) for r in ordered[:6]]}
+    # 24: the overlay shows them in rows (same channel, then the rest); autoplay takes the first.
+    return {"autoplay_n": ctx.autoplay_n, "cards": [_card(r, profile_id) for r in ordered[:24]]}
 
 
 @router.get("/thumb/{item_id}")

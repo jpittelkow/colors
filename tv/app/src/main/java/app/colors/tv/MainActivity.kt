@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import app.colors.tv.data.Api
+import app.colors.tv.ui.BetweenScreen
 import app.colors.tv.ui.C
 import app.colors.tv.ui.ChannelScreen
 import app.colors.tv.ui.ChannelsScreen
@@ -92,7 +93,8 @@ class MainActivity : ComponentActivity() {
                         is Screen.Channels -> ChannelsScreen(nav, sc.profile)
                         is Screen.Search -> SearchScreen(nav, sc.profile)
                         is Screen.Shelf -> ShelfScreen(nav, sc.profile, sc.kind)
-                        is Screen.Player -> PlayerScreen(nav, sc.profile, sc.itemId, sc.chain)
+                        is Screen.Player -> PlayerScreen(nav, sc.profile, sc.itemId, sc.chain, sc.fromStart)
+                        is Screen.Between -> BetweenScreen(nav, sc.profile, sc.played, sc.next, sc.chain)
                         is Screen.Stopped -> StoppedScreen(nav, sc.profile, sc.time, sc.note)
                     } }
                 }

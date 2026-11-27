@@ -83,7 +83,10 @@ sealed interface Screen {
     data class Channels(val profile: Profile) : Screen
     data class Search(val profile: Profile) : Screen
     data class Shelf(val profile: Profile, val kind: String) : Screen
-    data class Player(val profile: Profile, val itemId: Int, val chain: Int = 0) : Screen
+    /** `chain`: videos autoplay has started in a row; `fromStart`: Watch again, so ignore the resume point. */
+    data class Player(val profile: Profile, val itemId: Int, val chain: Int = 0, val fromStart: Boolean = false) : Screen
+    /** Between two videos when autoplay would go on (ADR 0044). */
+    data class Between(val profile: Profile, val played: Card, val next: List<Card>, val chain: Int) : Screen
     data class Stopped(val profile: Profile, val time: TimeState?, val note: String = "") : Screen
 }
 

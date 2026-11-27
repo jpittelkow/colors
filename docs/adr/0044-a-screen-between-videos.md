@@ -1,6 +1,6 @@
 # 0044. A screen between videos: watch again, up next in 5, more below
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-27
 
 ## Context
@@ -67,6 +67,6 @@ plays the first of those or goes back to the rows.
 
 ## Where it lives
 
-To build: `tv/app/src/main/java/app/colors/tv/ui/Between.kt` (new screen), `ui/Player.kt` (end of video → Between
-instead of the next player), `Nav` (`Screen.Between`). Mockup: `docs/design/between-videos.html`. Related: ADR 0011,
-0012, 0013, 0017.
+`tv/app/src/main/java/app/colors/tv/ui/Between.kt` (the screen), `ui/Player.kt` (end of video → Between; `fromStart`
+for Watch again), `ui/Screens.kt` (`Screen.Between`), `MainActivity.kt`. TV app 0.5.0. Mockup:
+`docs/design/between-videos.html`. Related: ADR 0011, 0012, 0013, 0017.

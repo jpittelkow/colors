@@ -59,7 +59,7 @@ The app then shows a six-digit code and a QR code. Pair it on the parents' page:
 - Finding the server (typed address if it doesn't answer), pairing with code and QR (ADR 0018, 0039).
 - Who's watching, the home rows with the reference look, a channel's videos.
 - The player: resume, skipped parts, heartbeats, stop when the server says, autoplay up to the parent's count,
-  the up-next row.
+  the up-next rows (the controls scroll), the screen between videos (ADR 0044).
 - Timer, "one more", time's up and closed hours, with a QR code for a parent and the line spoken aloud.
 
 Not yet: the grown-ups passcode, "together", search, a channel page header with its picture, the control socket

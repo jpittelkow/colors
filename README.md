@@ -30,7 +30,7 @@ the TV that a parent did not allow.
 
 - Pair with a six-digit code or a QR code; pick a profile.
 - Home rows, Channels, Recently watched, Recommended, New; a channel's videos.
-- Player with resume, skipped parts, Start over, autoplay up to the parent's count.
+- Player with resume, skipped parts, Start over, autoplay up to the parent's count, with a screen between videos (Watch again, Up next in 5 seconds, more to watch).
 - Timer, "pick one more", time's up, break and closed-hours screens, with recorded spoken lines and a QR code that
   opens that child's page for a grown-up.
 

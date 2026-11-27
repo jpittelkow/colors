@@ -47,6 +47,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import app.colors.tv.data.Card
 import app.colors.tv.data.Profile
 import coil3.compose.AsyncImage
@@ -79,6 +81,8 @@ fun BetweenScreen(nav: Nav, profile: Profile, played: Card, next: List<Card>, ch
         ring.animateTo(1f, tween(COUNTDOWN_MS, easing = LinearEasing))
         nav.replace(Screen.Player(profile, upNext.id, chain + 1))
     }
+    // Home pressed, or another app on top: no video starts in the background.
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { counting = false }
     // Stopped and left alone: back to the rows, so nobody's TV sits on a still picture.
     LaunchedEffect(counting, lastKey) {
         if (counting) return@LaunchedEffect

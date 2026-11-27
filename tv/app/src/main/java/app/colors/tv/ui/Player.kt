@@ -52,6 +52,8 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -109,6 +111,15 @@ fun PlayerScreen(nav: Nav, profile: Profile, itemId: Int, chain: Int, fromStart:
     DisposableEffect(playing) {
         view.keepScreenOn = playing
         onDispose { view.keepScreenOn = false }
+    }
+
+    // Home, or another app on top: pause, and tell the server, so no sound plays behind the launcher (2026-11-27).
+    // Coming back, he finds it paused with the controls up.
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        if (finished) return@LifecycleEventEffect
+        player.pause()
+        controls = true
+        scope.launch { runCatching { nav.api.heartbeat(profile.id, itemId, player.currentPosition / 1000.0, "paused") } }
     }
 
     fun stopAndShow(t: TimeState?, note: String = "") {

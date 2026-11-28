@@ -194,7 +194,7 @@ SHELVES = {"recent": "Recently watched", "picked": "Recommended", "new": "New"}
 
 @router.get("/channels")
 def channels(profile_id: int, request: Request, device_id: int = Depends(device)) -> dict:
-    """Every channel with something this profile may watch now, newest first, with its picture."""
+    """Every channel with something this profile may watch now, A to Z by title, with its picture."""
     with _db(request).conn() as c:
         _profile(c, profile_id)
         ctx = clock.context(c, profile_id)
@@ -214,6 +214,8 @@ def channels(profile_id: int, request: Request, device_id: int = Depends(device)
             "picture": f"{API}/channel-picture/{cid}?profile_id={profile_id}" if has_pic else f"{API}/thumb/{rows[0]['id']}?profile_id={profile_id}",
             "round": has_pic,
         })
+    # A to Z, so a child finds the same channel in the same place every time (owner's ask, 2026-11-27).
+    out.sort(key=lambda ch: (ch["title"] or "").casefold())
     return {"channels": out}
 
 

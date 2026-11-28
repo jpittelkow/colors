@@ -171,6 +171,17 @@ def test_menu_lists_channels_recent_recommended_and_new(env):
     assert shelf("new") == [a] and shelf("picked") == []  # the same filtering as the home rows
 
 
+def test_menu_channels_are_a_to_z(env):
+    sam = _profile(env, "Sam")
+    tv = env.pair()["client"]
+    env.fake.channel_of = {"z1": ("chanz", "zoo Songs"), "a1": ("chana", "Animals")}
+    for vid in ("a1", "aaa", "z1"):  # newest first would be zoo, Trains, Animals
+        _add(env, vid, approve=True)
+    env.run_jobs()
+    chans = tv.get(f"{V}/channels", params={"profile_id": sam}).json()["channels"]
+    assert [c["title"] for c in chans] == ["Animals", "Trains", "zoo Songs"]  # case does not matter
+
+
 def test_tv_search_finds_only_what_this_child_may_watch(env):
     sam, alex = _profile(env, "Sam"), _profile(env, "Alex")
     tv = env.pair()["client"]

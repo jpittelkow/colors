@@ -20,14 +20,16 @@ class FakeDownloader:
         self.channel_videos = [("c1", 300), ("c2", 40), ("c3", 600)]
         self.segs = []
         self.description = ""
+        self.channel_of: dict[str, tuple[str, str]] = {}  # video id -> (channel id, title); default chan1 "Trains"
 
     def segments(self, video_id: str, categories: list[str]):
         return list(self.segs)
 
     def _info(self, vid: str) -> VideoInfo:
+        cid, ctitle = self.channel_of.get(vid, ("chan1", "Trains"))
         return VideoInfo(
             external_id=vid, url=f"https://example.test/watch?v={vid}", title=f"Video {vid}", duration_s=100,
-            upload_date="2026-01-02", channel_id="chan1", channel_title="Trains",
+            upload_date="2026-01-02", channel_id=cid, channel_title=ctitle,
         )
 
     def channel_avatar(self, channel_id: str):
@@ -61,7 +63,8 @@ class FakeDownloader:
         if self.fail:
             raise RuntimeError("boom")
         vid = url.rsplit("=", 1)[-1]
-        folder = self.library_dir / "Trains [chan1]"
+        cid, ctitle = self.channel_of.get(vid, ("chan1", "Trains"))
+        folder = self.library_dir / f"{ctitle} [{cid}]"
         folder.mkdir(parents=True, exist_ok=True)
         f = folder / f"2026-01-02 - Video {vid} [{vid}].mp4"
         f.write_bytes(b"0123456789" * 100)
